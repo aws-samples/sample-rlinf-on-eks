@@ -1,0 +1,62 @@
+# Assets (papers, large binaries)
+/assets/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+tfplan
+.terraform.lock.hcl
+
+# Build artifacts
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.ruff_cache/
+
+# Environment / secrets
+.env
+.env.*
+
+# Internal testing (shared cluster scripts and config)
+.internal/
+TODO.md
+
+# OpenCode config (local to developer; only skills/ is public)
+.opencode/*
+!.opencode/skills/
+
+# Agent-supervisor vendored modules (regenerated automatically)
+infrastructure/modules/
+
+# Internal docs: ignore by default, but re-track lightweight design/continuity
+# text for cross-session design continuity during development. Heavy binaries
+# (trivy-evidence, papers, video_artifacts, images) and security-scan artifacts
+# stay ignored. Re-suppress the un-ignore lines before public release.
+docs/*
+docs/**/.DS_Store
+# -- Design + continuity text (tracked) --
+!docs/superpowers/
+!docs/features/
+!docs/HANDOVER-*.md
+!docs/architecture-infrastructure.md
+!docs/launch-runbook-training.md
+# Within un-ignored dirs, exclude binaries
+docs/**/*.png
+docs/**/*.svg
+docs/**/*.mp4
+docs/**/*.drawio
+docs/**/*.drawio.svg
+
+# Video artifacts (raw eval dumps, stored on S3/FSx — showcase videos go in assets/)
+examples/*/video_artifacts/
+
+# draw.io backup files
+.*.bkp
+
+# OS
+.DS_Store

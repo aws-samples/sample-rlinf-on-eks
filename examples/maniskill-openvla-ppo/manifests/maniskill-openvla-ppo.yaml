@@ -1,0 +1,89 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# ManiSkill + OpenVLA PPO
+#
+# The canonical first example. Trains OpenVLA on ManiSkill3 robotic
+# manipulation using PPO. Full 8-GPU config: actor on 0-7, env on 0-3,
+# rollout on 4-7.
+#
+# Image: embodied-maniskill_libero (BUILD_TARGET in buildspec.yml)
+# Venv:  openvla
+# Config: maniskill_ppo_openvla
+#
+# Prerequisites:
+#   - model-download.yaml completed (downloads openvla-7b-rlvla-warmup)
+#
+# Usage:
+#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   envsubst < examples/maniskill-openvla-ppo.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rlinf-maniskill-openvla
+  namespace: ${NAMESPACE}
+  labels:
+    app: rlinf
+    reference: rlinf
+    example: maniskill-openvla-ppo
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: rlinf
+        example: maniskill-openvla-ppo
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: training-sa
+      nodeSelector:
+        node.kubernetes.io/instance-type: p5en.48xlarge
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: training
+          image: ${ECR_URI}:latest
+          command: ["bash", "/workspace/eks/scripts/run_training_eks.sh"]
+          env:
+            - name: CONFIG_NAME
+              value: "maniskill_ppo_openvla"
+            - name: VENV_NAME
+              value: "openvla"
+            - name: MODEL_PATH
+              value: "/fsx/models/openvla-7b-rlvla-warmup"
+            - name: NUM_GPUS
+              value: "8"
+            - name: NUM_NODES
+              value: "1"
+            - name: CKPT_PATH
+              value: "/fsx/checkpoints"
+            - name: MANISKILL_ASSET_DIR
+              value: "/fsx/assets/maniskill"
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+          resources:
+            requests:
+              nvidia.com/gpu: 8
+              cpu: "90"
+              memory: "1000Gi"
+            limits:
+              nvidia.com/gpu: 8
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "64Gi"

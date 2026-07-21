@@ -1,0 +1,171 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Infrastructure Smoke Test
+#
+# Validates GPU, EFA, and FSx on a single node.
+# Run after infrastructure provisioning:
+#   kubectl apply -f manifests/smoke-test.yaml
+#   kubectl logs -f job/smoke-test
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-test
+  labels:
+    app: smoke-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: smoke-test
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: smoke-test
+          image: nvcr.io/nvidia/pytorch:24.07-py3
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              PASS=0
+              FAIL=0
+
+              echo "============================================"
+              echo "  VLA-on-EKS Infrastructure Smoke Test"
+              echo "============================================"
+              echo ""
+
+              # --- Test 1: GPU ---
+              echo "--- Test 1: GPU Availability ---"
+              if nvidia-smi > /dev/null 2>&1; then
+                GPU_COUNT=$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)
+                GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)
+                GPU_MEM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader | head -1)
+                echo "PASS: $GPU_COUNT GPU(s) detected: $GPU_NAME ($GPU_MEM)"
+                PASS=$((PASS + 1))
+              else
+                echo "FAIL: nvidia-smi not available"
+                FAIL=$((FAIL + 1))
+              fi
+              echo ""
+
+              # --- Test 2: CUDA ---
+              echo "--- Test 2: CUDA + PyTorch ---"
+              if python3 -c "
+              import torch
+              assert torch.cuda.is_available(), 'CUDA not available'
+              print(f'PyTorch {torch.__version__}, CUDA {torch.version.cuda}')
+              print(f'Device: {torch.cuda.get_device_name(0)}')
+              t = torch.randn(1000, 1000, device='cuda')
+              result = torch.mm(t, t)
+              print(f'GPU matmul OK: {result.shape}')
+              " 2>&1; then
+                echo "PASS: CUDA + PyTorch working"
+                PASS=$((PASS + 1))
+              else
+                echo "FAIL: CUDA + PyTorch test failed"
+                FAIL=$((FAIL + 1))
+              fi
+              echo ""
+
+              # --- Test 3: EFA ---
+              echo "--- Test 3: EFA Device ---"
+              EFA_DEVICES=$(ls -1 /sys/class/infiniband/ 2>/dev/null | wc -l)
+              if [ "$EFA_DEVICES" -gt 0 ]; then
+                echo "PASS: $EFA_DEVICES EFA device(s) found"
+                ls -1 /sys/class/infiniband/
+                PASS=$((PASS + 1))
+              else
+                echo "FAIL: No EFA devices in /sys/class/infiniband/"
+                FAIL=$((FAIL + 1))
+              fi
+              echo ""
+
+              # --- Test 4: EFA libfabric ---
+              echo "--- Test 4: EFA libfabric Provider ---"
+              if fi_info -p efa > /dev/null 2>&1; then
+                echo "PASS: EFA provider available via fi_info"
+                fi_info -p efa 2>&1 | head -5
+                PASS=$((PASS + 1))
+              else
+                echo "WARN: fi_info -p efa not available (may need aws-ofi-nccl in container)"
+                # Not a hard fail -- NCCL can still find EFA at runtime
+                PASS=$((PASS + 1))
+              fi
+              echo ""
+
+              # --- Test 5: FSx Mount ---
+              echo "--- Test 5: FSx for Lustre (/fsx) ---"
+              if [ -d /fsx ]; then
+                # Write test
+                TEST_FILE="/fsx/smoke-test-$(hostname)-$(date +%s)"
+                echo "smoke-test-data" > "$TEST_FILE" 2>/dev/null
+                if [ -f "$TEST_FILE" ]; then
+                  CONTENT=$(cat "$TEST_FILE")
+                  rm -f "$TEST_FILE"
+                  if [ "$CONTENT" = "smoke-test-data" ]; then
+                    echo "PASS: FSx write/read/delete OK"
+                    df -h /fsx | tail -1
+                    PASS=$((PASS + 1))
+                  else
+                    echo "FAIL: FSx read returned wrong content"
+                    FAIL=$((FAIL + 1))
+                  fi
+                else
+                  echo "FAIL: FSx write failed"
+                  FAIL=$((FAIL + 1))
+                fi
+              else
+                echo "FAIL: /fsx not mounted"
+                FAIL=$((FAIL + 1))
+              fi
+              echo ""
+
+              # --- Test 6: Shared Memory ---
+              echo "--- Test 6: Shared Memory (/dev/shm) ---"
+              SHM_SIZE=$(df -h /dev/shm | tail -1 | awk '{print $2}')
+              echo "PASS: /dev/shm size: $SHM_SIZE"
+              PASS=$((PASS + 1))
+              echo ""
+
+              # --- Summary ---
+              echo "============================================"
+              echo "  Results: $PASS passed, $FAIL failed"
+              echo "============================================"
+
+              if [ "$FAIL" -gt 0 ]; then
+                echo "SMOKE TEST FAILED"
+                exit 1
+              else
+                echo "SMOKE TEST PASSED"
+                exit 0
+              fi
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+            limits:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "8Gi"

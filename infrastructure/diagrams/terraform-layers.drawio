@@ -1,0 +1,45 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram name="Terraform Layers" id="terraform-layers">
+    <mxGraphModel dx="667" dy="523" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="cluster" parent="1" style="rounded=1;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;cluster&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;VPC, EKS, IAM&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="130" x="40" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="storage" parent="1" style="rounded=1;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;storage&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;FSx, S3, PV/PVC&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="130" x="250" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="addons" parent="1" style="rounded=1;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;addons&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;Karpenter, GPU Op,&lt;br&gt;optional monitoring&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="140" x="250" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="build" parent="1" style="rounded=1;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;build&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;ECR, CodeBuild&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="130" x="250" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="workloads" parent="1" style="rounded=1;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;workloads&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 10px;&quot;&gt;NodePool, EC2NodeClass,&lt;br&gt;ResourceQuota&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="480" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" target="storage">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="110" y="90" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" target="addons">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="cluster" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" target="build">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="110" y="290" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="addons" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" target="workloads">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

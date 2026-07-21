@@ -1,0 +1,33 @@
+# Exclude everything the Docker build doesn't need.
+# Keeps the build context small even when the full repo is the CodeBuild source.
+
+# Infrastructure (Terraform, validation manifests, deploy scripts)
+infrastructure/
+.opencode/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# Documentation and assets
+docs/
+*.md
+assets/
+
+# Git
+.git/
+.gitignore
+
+# Tests (validation harness, not needed in image)
+tests/
+validate.sh
+
+# Build artifacts
+*.zip
+
+# Python caches
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# OS
+.DS_Store

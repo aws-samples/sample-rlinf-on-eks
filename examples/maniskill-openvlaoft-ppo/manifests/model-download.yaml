@@ -1,0 +1,118 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Download Model Weights for ManiSkill + OpenVLA-OFT PPO
+#
+# Downloads the OpenVLA-OFT SFT checkpoint (fine-tuned on LIBERO-10).
+# ManiSkill assets are shared with the OpenVLA example -- run that download first
+# or ensure /fsx/assets/maniskill exists.
+#
+# Prerequisites:
+#   - FSx for Lustre PVC (fsx-claim) available in the rlinf namespace
+#   - ManiSkill assets already staged (from maniskill-openvla-ppo example or manually)
+#
+# Usage:
+#   export NAMESPACE=rlinf  # or your namespace
+#   envsubst < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-maniskill-openvlaoft
+  namespace: ${NAMESPACE}
+  labels:
+    app: model-download
+    example: maniskill-openvlaoft-ppo
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  ManiSkill + OpenVLA-OFT: Model Download"
+              echo "============================================"
+
+              pip install -q huggingface_hub
+
+              download_model() {
+                local model_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Model: $model_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/config.json" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$model_id',
+                  local_dir='$target_dir',
+                  local_dir_use_symlinks=False,
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              download_dataset() {
+                local repo_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Dataset: $repo_id ==="
+                echo "  Target: $target_dir"
+                if [ -d "$target_dir" ] && [ "$(ls -A $target_dir 2>/dev/null)" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$repo_id',
+                  repo_type='dataset',
+                  local_dir='$target_dir',
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              # Model: OpenVLA-OFT fine-tuned on LIBERO-10
+              download_model "RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Main" "/fsx/models/openvla-oft-sft-libero10"
+
+              # ManiSkill assets (shared with OpenVLA example)
+              download_dataset "RLinf/maniskill_assets" "/fsx/assets/maniskill"
+
+              echo ""
+              echo "=== Download complete ==="
+              echo "Models:"
+              du -sh /fsx/models/openvla-oft-sft-libero10 2>/dev/null || echo "  (not found)"
+              echo "Assets:"
+              du -sh /fsx/assets/maniskill 2>/dev/null || echo "  (not found)"
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

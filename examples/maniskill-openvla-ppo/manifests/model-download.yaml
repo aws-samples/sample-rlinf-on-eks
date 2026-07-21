@@ -1,0 +1,116 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Download Model Weights and Simulator Assets for ManiSkill + OpenVLA PPO
+#
+# Downloads the OpenVLA-7B RL warmup checkpoint and ManiSkill simulator assets.
+# Models are saved to FSx for Lustre and shared across training pods.
+#
+# Prerequisites:
+#   - FSx for Lustre PVC (fsx-claim) available in the rlinf namespace
+#
+# Usage:
+#   export NAMESPACE=rlinf  # or your namespace
+#   envsubst < examples/maniskill-openvla-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   kubectl logs -f job/model-download-maniskill-openvla -n $NAMESPACE
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-maniskill-openvla
+  namespace: ${NAMESPACE}
+  labels:
+    app: model-download
+    example: maniskill-openvla-ppo
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  ManiSkill + OpenVLA: Model Download"
+              echo "============================================"
+
+              pip install -q huggingface_hub
+
+              download_model() {
+                local model_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Model: $model_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/config.json" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$model_id',
+                  local_dir='$target_dir',
+                  local_dir_use_symlinks=False,
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              download_dataset() {
+                local repo_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Dataset: $repo_id ==="
+                echo "  Target: $target_dir"
+                if [ -d "$target_dir" ] && [ "$(ls -A $target_dir 2>/dev/null)" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$repo_id',
+                  repo_type='dataset',
+                  local_dir='$target_dir',
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              # Model: OpenVLA-7B with RL warmup checkpoint
+              download_model "gen-robot/openvla-7b-rlvla-warmup" "/fsx/models/openvla-7b-rlvla-warmup"
+
+              # Simulator assets: ManiSkill scene data
+              download_dataset "RLinf/maniskill_assets" "/fsx/assets/maniskill"
+
+              echo ""
+              echo "=== Download complete ==="
+              echo "Models:"
+              du -sh /fsx/models/openvla-7b-rlvla-warmup 2>/dev/null || echo "  (not found)"
+              echo "Assets:"
+              du -sh /fsx/assets/maniskill 2>/dev/null || echo "  (not found)"
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

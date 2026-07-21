@@ -1,0 +1,208 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# RLinf Multi-Node Training StatefulSet
+#
+# Deploys N pods (one per GPU node) for distributed RL training.
+# Pod-0 acts as Ray head and launches the training script.
+# Pod-1+ are Ray workers that connect to the head.
+#
+# Parameterized via CONFIG_NAME, VENV_NAME, MODEL_PATH env vars.
+#
+# Prerequisites:
+#   - training-service.yaml applied (headless Service for DNS discovery)
+#   - FSx PVC "fsx-claim" bound
+#   - Pre-trained model weights staged on FSx
+#
+# Before applying, substitute the ECR image URI:
+#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: training
+  namespace: rlinf
+  labels:
+    app: rlinf-multi
+    reference: rlinf
+spec:
+  serviceName: training-svc
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: rlinf-multi
+  template:
+    metadata:
+      labels:
+        app: rlinf-multi
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      serviceAccountName: training-sa
+      nodeSelector:
+        role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 120
+
+      # Topology-aware scheduling:
+      # 1. Prefer nodes under the same layer-2 network switch (lowest NCCL latency)
+      # 2. Enforce one pod per node (anti-affinity)
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.k8s.aws/network-node-layer-2
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: rlinf-multi
+
+      # One pod per node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - rlinf-multi
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+        - name: training
+          image: ${ECR_URI}:latest  # Replace or use envsubst
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              # Activate the correct venv
+              UV_PATH="${UV_PATH:-/opt/venv}"
+              if [ -f "${UV_PATH}/${VENV_NAME}/bin/activate" ]; then
+                source "${UV_PATH}/${VENV_NAME}/bin/activate"
+              fi
+
+              ORDINAL=${HOSTNAME##*-}
+              NAMESPACE="${POD_NAMESPACE:-rlinf}"
+              HEAD_ADDR="training-0.training-svc.${NAMESPACE}.svc.cluster.local"
+
+              if [ "$ORDINAL" = "0" ]; then
+                echo "=== Starting Ray head node ==="
+                ray start --head --port=6379 --dashboard-host=0.0.0.0
+
+                echo "Waiting for $NUM_NODES Ray nodes..."
+                TIMEOUT=300
+                ELAPSED=0
+                while [ "$(python3 -c 'import ray; ray.init(address="auto"); print(len(ray.nodes()))' 2>/dev/null || echo 0)" -lt "$NUM_NODES" ]; do
+                  sleep 5
+                  ELAPSED=$((ELAPSED + 5))
+                  if [ $ELAPSED -ge $TIMEOUT ]; then
+                    echo "ERROR: Timed out waiting for Ray workers after ${TIMEOUT}s"
+                    exit 1
+                  fi
+                done
+                echo "All $NUM_NODES Ray nodes connected. Starting training..."
+
+                # Copy runtime hotfix if available
+                if [ -f /tmp/scripts/run_training_eks.sh ]; then
+                  cp /tmp/scripts/run_training_eks.sh /workspace/eks/scripts/run_training_eks.sh
+                  chmod +x /workspace/eks/scripts/run_training_eks.sh
+                fi
+                bash /workspace/eks/scripts/run_training_eks.sh
+              else
+                echo "=== Starting Ray worker, connecting to $HEAD_ADDR ==="
+                ray start --address="${HEAD_ADDR}:6379" --block
+              fi
+          env:
+            # --- Experiment selection ---
+            - name: CONFIG_NAME
+              value: "maniskill_ppo_openvla_quickstart"
+            - name: VENV_NAME
+              value: "openvla"
+            - name: MODEL_PATH
+              value: "/fsx/models/openvla-7b-rlvla-warmup"
+            - name: EXPERIMENT_NAME
+              value: "maniskill-ppo-openvla-multi"
+            # --- Cluster config ---
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NUM_NODES
+              value: "2"
+            - name: NUM_GPUS
+              value: "8"
+            - name: CKPT_PATH
+              value: "/fsx/checkpoints"
+            # --- Experiment Tracking (MLflow) ---
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow.rlinf.svc.cluster.local"
+            - name: EXPERIMENT_NAME
+              value: "${EXPERIMENT_NAME}"
+            # --- NCCL + EFA ---
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: FI_PROVIDER
+              value: "efa"
+            - name: FI_EFA_USE_DEVICE_RDMA
+              value: "1"
+            - name: FI_EFA_FORK_SAFE
+              value: "1"
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: "expandable_segments:True"
+            - name: TOKENIZERS_PARALLELISM
+              value: "true"
+            - name: TORCH_NCCL_AVOID_RECORD_STREAMS
+              value: "1"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+          resources:
+            requests:
+              nvidia.com/gpu: 8
+              vpc.amazonaws.com/efa: 4
+              cpu: "90"
+              memory: "1000Gi"
+            limits:
+              nvidia.com/gpu: 8
+              vpc.amazonaws.com/efa: 4
+              cpu: "96"
+              memory: "1100Gi"
+          ports:
+            - containerPort: 6379
+              name: ray-head
+            - containerPort: 8265
+              name: ray-dashboard
+          livenessProbe:
+            exec:
+              command:
+                - bash
+                - -c
+                - "ray status > /dev/null 2>&1 || exit 0"
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            failureThreshold: 5
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+            - name: training-script
+              mountPath: /tmp/scripts
+              readOnly: true
+
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "64Gi"
+        - name: training-script
+          configMap:
+            name: training-script
+            optional: true

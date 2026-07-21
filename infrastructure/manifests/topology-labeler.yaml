@@ -1,0 +1,140 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# EC2 Instance Topology Labeler DaemonSet
+#
+# Runs on each GPU node, queries the EC2 DescribeInstanceTopology API,
+# and applies network topology labels to the Kubernetes node:
+#   - topology.k8s.aws/network-node-layer-1 (top of hierarchy)
+#   - topology.k8s.aws/network-node-layer-2 (mid-level)
+#   - topology.k8s.aws/network-node-layer-3 (bottom, directly connected)
+#
+# These labels enable topology-aware pod scheduling (see Skill 04).
+# Requires ec2:DescribeInstanceTopology permission on the node IAM role.
+#
+# Usage:
+#   kubectl apply -f manifests/topology-labeler.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: topology-labeler
+  namespace: kube-system
+  labels:
+    app: topology-labeler
+spec:
+  selector:
+    matchLabels:
+      app: topology-labeler
+  template:
+    metadata:
+      labels:
+        app: topology-labeler
+    spec:
+      nodeSelector:
+        role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      serviceAccountName: topology-labeler
+      hostNetwork: true
+      containers:
+        - name: labeler
+          image: amazon/aws-cli:latest
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              # Install kubectl and jq
+              curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+              chmod +x kubectl && mv kubectl /usr/local/bin/
+              yum install -y jq 2>/dev/null || dnf install -y jq 2>/dev/null || true
+
+              # Get instance ID and region from IMDS v2
+              TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" \
+                -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+              INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                http://169.254.169.254/latest/meta-data/instance-id)
+              REGION=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" \
+                http://169.254.169.254/latest/meta-data/placement/region)
+
+              echo "Instance: $INSTANCE_ID, Region: $REGION"
+
+              # Query EC2 instance topology
+              TOPOLOGY_JSON=$(aws ec2 describe-instance-topology \
+                --instance-ids "$INSTANCE_ID" \
+                --region "$REGION" \
+                --output json 2>/dev/null || echo '{"Instances":[]}')
+
+              NETWORK_NODES=$(echo "$TOPOLOGY_JSON" | jq -r '.Instances[0].NetworkNodes // empty')
+
+              if [ -z "$NETWORK_NODES" ] || [ "$NETWORK_NODES" = "null" ]; then
+                echo "WARNING: No topology data available for $INSTANCE_ID"
+                echo "Instance type may not support DescribeInstanceTopology"
+                echo "Sleeping indefinitely (labels not applied)"
+                sleep infinity
+              fi
+
+              NODE_COUNT=$(echo "$NETWORK_NODES" | jq 'length')
+              echo "Found $NODE_COUNT network node layers"
+
+              # Get Kubernetes node name via Downward API
+              NODE_NAME="$MY_NODE_NAME"
+
+              # Apply labels for each layer (listed top-to-bottom in API response)
+              LABEL_ARGS=""
+              for i in $(seq 0 $((NODE_COUNT - 1))); do
+                LAYER=$((i + 1))
+                NODE_ID=$(echo "$NETWORK_NODES" | jq -r ".[$i]")
+                LABEL_ARGS="$LABEL_ARGS topology.k8s.aws/network-node-layer-${LAYER}=${NODE_ID}"
+                echo "Layer $LAYER: $NODE_ID"
+              done
+
+              kubectl label node "$NODE_NAME" $LABEL_ARGS --overwrite
+              echo "Topology labels applied to node $NODE_NAME"
+
+              # Sleep forever -- DaemonSet stays running, re-labels on pod restart
+              sleep infinity
+          env:
+            - name: MY_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "256Mi"
+---
+# Service account with RBAC to label nodes
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: topology-labeler
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: topology-labeler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: topology-labeler
+subjects:
+  - kind: ServiceAccount
+    name: topology-labeler
+    namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: topology-labeler
+  apiGroup: rbac.authorization.k8s.io

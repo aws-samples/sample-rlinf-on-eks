@@ -1,0 +1,73 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# =============================================================================
+# RLinf-on-EKS CodeBuild Build Specification
+#
+# Two-stage build:
+#   1. Clone RLinf repo, build upstream image with BUILD_TARGET
+#   2. Layer EFA networking stack on top using examples/Dockerfile
+#
+# Source: rlinf-on-eks repo (uploaded to S3 as zip).
+#
+# Environment variables (set in CodeBuild project or override at start-build):
+#   - AWS_ACCOUNT_ID: AWS account ID (auto-populated by CodeBuild)
+#   - AWS_DEFAULT_REGION: Build region (auto-populated by CodeBuild)
+#   - ECR_REPO: ECR repository name (default: rlinf-on-eks/rlinf)
+#   - UPSTREAM_REPO: GitHub URL for the RLinf repository
+#   - UPSTREAM_REF: Git ref to checkout (tag, branch, or commit SHA)
+#   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-libero)
+#   - EXTRAS: Comma-separated list of extras to install (default: rlinf)
+#   - DREAMZERO_REPO: GitHub URL for the DreamZero (groot) package repo
+#   - DREAMZERO_REF: Git ref to checkout for DreamZero (tag, branch, or commit SHA)
+# =============================================================================
+version: 0.2
+
+env:
+  variables:
+    ECR_REPO: "rlinf-on-eks/rlinf"
+    UPSTREAM_REPO: "https://github.com/RLinf/RLinf.git"
+    UPSTREAM_REF: "b3bbabb1f461"
+    BUILD_TARGET: "embodied-libero"
+    EXTRAS: "rlinf"
+    DREAMZERO_REPO: "https://github.com/RLinf/dreamzero.git"
+    DREAMZERO_REF: "ab790c198fbc"
+
+phases:
+  pre_build:
+    commands:
+      - "echo === Pre-build phase ==="
+      - "AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)"
+      - "ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}"
+      - "IMAGE_TAG=${BUILD_TARGET}-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d-%H%M%S)}"
+      - "echo ECR_URI=$ECR_URI"
+      - "echo IMAGE_TAG=$IMAGE_TAG"
+      - "echo BUILD_TARGET=$BUILD_TARGET"
+      - "echo EXTRAS=$EXTRAS"
+      - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+      - "echo Cloning upstream RLinf at ref $UPSTREAM_REF..."
+      - "git clone $UPSTREAM_REPO RLinf && git -C RLinf checkout $UPSTREAM_REF"
+      # Clone DreamZero (groot) package repo
+      - "echo Cloning DreamZero groot package at ref $DREAMZERO_REF"
+      - "git clone $DREAMZERO_REPO DreamZero && git -C DreamZero checkout $DREAMZERO_REF"
+
+  build:
+    commands:
+      - "echo === Stage 1: Build upstream RLinf image ==="
+      - "echo Building upstream image with BUILD_TARGET=$BUILD_TARGET..."
+      - "docker build --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg NO_MIRROR=1 -t rlinf-upstream-${BUILD_TARGET} -f RLinf/docker/Dockerfile RLinf/"
+      - "echo === Stage 2: Layer EFA networking overlay, EXTRAS=$EXTRAS ==="
+      - "echo Building EKS overlay image..."
+      - "docker build --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg EXTRAS=$EXTRAS -t $ECR_URI:$IMAGE_TAG -t $ECR_URI:latest -f examples/Dockerfile ."
+
+  post_build:
+    commands:
+      - "echo === Post-build phase ==="
+      - "docker push $ECR_URI:$IMAGE_TAG"
+      - "docker push $ECR_URI:latest"
+      - "echo Build complete. Image URI $ECR_URI:$IMAGE_TAG"
+      - "echo BUILD_TARGET=$BUILD_TARGET EXTRAS=$EXTRAS"
+
+cache:
+  paths:
+    - '/root/.cache/uv/**/*'

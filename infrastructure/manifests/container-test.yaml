@@ -1,0 +1,321 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Container Validation Test
+#
+# Comprehensive test of the built RLinf container image.
+# Verifies CUDA/GPU, EFA, multi-venv pattern, EFA/NCCL libraries,
+# RLinf project structure, ManiSkill, FSx, Ray, and OpenMPI.
+#
+# Architecture notes:
+#   - PyTorch is only in venvs (/opt/venv/<name>), NOT system Python
+#   - The upstream install.sh uses --no-install-project by default, so
+#     the rlinf Python package is NOT installed -- only dependencies
+#   - Upstream source (examples/) is not baked into the image
+#   - Only EKS-specific scripts are COPY'd by Stage 2 Dockerfile
+#   - aws-ofi-nccl libs are at /opt/amazon/ofi-nccl/lib/ (not under x86_64-linux-gnu/)
+#
+# Prerequisites:
+#   - ECR image built and pushed
+#   - FSx PVC "fsx-claim" bound (for FSx access test)
+#
+# Usage:
+#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   envsubst < manifests/container-test.yaml | kubectl apply -f -
+#   kubectl logs -f job/container-test
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: container-test
+  namespace: rlinf
+  labels:
+    app: container-test
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1200
+  template:
+    metadata:
+      labels:
+        app: container-test
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        node-role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: test
+          image: ${ECR_URI}:latest
+          imagePullPolicy: Always
+          command: ["python3", "-u", "/tmp/test.py"]
+          env:
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+            - name: TRANSFORMERS_OFFLINE
+              value: "0"
+            - name: HF_HUB_DISABLE_TELEMETRY
+              value: "1"
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+              cpu: "8"
+              memory: "32Gi"
+            limits:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+              cpu: "16"
+              memory: "64Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+            - name: test-script
+              mountPath: /tmp/test.py
+              subPath: test.py
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "8Gi"
+        - name: test-script
+          configMap:
+            name: container-test-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: container-test-script
+  namespace: rlinf
+data:
+  test.py: |
+    # RLinf-on-EKS Container Validation Test
+    #
+    # Tests the two-stage image: upstream RLinf (multi-venv) + EFA overlay.
+    # NOTE: PyTorch is installed ONLY in venvs (/opt/venv/<name>), not in
+    # system Python. The upstream install.sh uses --no-install-project by
+    # default, so the rlinf package itself is not installed -- only its
+    # dependencies. Training scripts are provided at runtime, not baked in.
+    import os, sys, pathlib, subprocess
+
+    PASS = 0
+    FAIL = 0
+    UV_PATH = os.environ.get("UV_PATH", "/opt/venv")
+
+    def run_test(name, fn):
+        global PASS, FAIL
+        print(f"\n--- {name} ---")
+        try:
+            fn()
+            print(f"PASS: {name}")
+            PASS += 1
+        except Exception as e:
+            print(f"FAIL: {name} -- {e}")
+            FAIL += 1
+
+    def find_venv_python(venv_names):
+        for v in venv_names:
+            p = os.path.join(UV_PATH, v, "bin", "python3")
+            if os.path.exists(p):
+                return v, p
+        return None, None
+
+    # Test 1: CUDA + GPU (via venv python -- torch is only in venvs)
+    def test_cuda():
+        cuda_script = (
+            "import torch; "
+            "assert torch.cuda.is_available(); "
+            "print('PyTorch ' + torch.__version__); "
+            "print('CUDA ' + torch.version.cuda); "
+            "print('Device: ' + torch.cuda.get_device_name(0)); "
+            "props = torch.cuda.get_device_properties(0); "
+            "vram = getattr(props, 'total_memory', getattr(props, 'total_mem', 0)); "
+            "print('VRAM: ' + str(round(vram / 1e9, 1)) + ' GB'); "
+            "t = torch.randn(512, 512, device='cuda'); "
+            "r = torch.mm(t, t); "
+            "print('GPU matmul OK')"
+        )
+        candidates = ["openvla", "openvla-oft", "openpi", "gr00t", "dexbotic"]
+        for venv in candidates:
+            python = os.path.join(UV_PATH, venv, "bin", "python3")
+            if not os.path.exists(python):
+                continue
+            result = subprocess.run(
+                [python, "-c", cuda_script],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    print(f"  {line}")
+                print(f"  (tested via venv {venv})")
+                return
+            else:
+                print(f"  venv {venv} failed: {result.stderr[:120]}")
+        raise RuntimeError("No venv could run CUDA test")
+    run_test("CUDA + GPU", test_cuda)
+
+    # Test 2: EFA Device
+    def test_efa():
+        ib_path = pathlib.Path("/sys/class/infiniband")
+        devices = list(ib_path.iterdir()) if ib_path.exists() else []
+        assert len(devices) > 0, "No EFA devices in /sys/class/infiniband/"
+        print(f"  {len(devices)} EFA device(s): {[d.name for d in devices]}")
+    run_test("EFA Device", test_efa)
+
+    # Test 3: EFA/NCCL Libraries
+    def test_efa_libs():
+        checks = {
+            "libfabric": "/opt/amazon/efa/lib/libfabric.so",
+            "NCCL": "/opt/nccl/build/lib/libnccl.so",
+            "GDRCopy": "/opt/gdrcopy/lib/libgdrapi.so",
+        }
+        # aws-ofi-nccl: check direct path first, then arch subdirs
+        ofi_found = None
+        for candidate in [
+            "/opt/amazon/ofi-nccl/lib/libnccl-ofi-tuner.so",
+            "/opt/amazon/ofi-nccl/lib/x86_64-linux-gnu/libnccl-ofi-tuner.so",
+            "/opt/amazon/ofi-nccl/lib/aarch64-linux-gnu/libnccl-ofi-tuner.so",
+        ]:
+            if os.path.exists(candidate):
+                ofi_found = candidate
+                break
+        checks["aws-ofi-nccl"] = ofi_found
+        missing = []
+        for name, path in checks.items():
+            if path and os.path.exists(path):
+                print(f"  OK: {name} -> {path}")
+            else:
+                print(f"  MISSING: {name}")
+                missing.append(name)
+        assert not missing, f"Missing EFA libraries: {missing}"
+    run_test("EFA/NCCL Libraries", test_efa_libs)
+
+    # Test 4: Multi-Venv Pattern (switch_env)
+    def test_venvs():
+        if not os.path.isdir(UV_PATH):
+            raise RuntimeError(f"UV_PATH={UV_PATH} not found")
+        venvs = sorted([
+            d for d in os.listdir(UV_PATH)
+            if os.path.isdir(os.path.join(UV_PATH, d))
+            and os.path.exists(os.path.join(UV_PATH, d, "bin", "activate"))
+        ])
+        print(f"  Available venvs: {venvs}")
+        assert len(venvs) > 0, "No venvs found"
+        assert os.path.exists("/usr/local/bin/switch_env"), "switch_env not found"
+        print("  switch_env utility present")
+        for venv in venvs[:3]:
+            result = subprocess.run(
+                [os.path.join(UV_PATH, venv, "bin", "python3"), "-c",
+                 "import torch; print(torch.__version__)"],
+                capture_output=True, text=True, timeout=30
+            )
+            status = "OK" if result.returncode == 0 else "FAIL"
+            ver = result.stdout.strip() if result.returncode == 0 else result.stderr[:80]
+            print(f"  {venv}: PyTorch {ver} [{status}]")
+    run_test("Multi-Venv Pattern", test_venvs)
+
+    # Test 5: RLinf Project Structure
+    # The upstream build uses --no-install-project (rlinf package not installed).
+    # We verify the project metadata and install script are present instead.
+    def test_rlinf_project():
+        toml_path = os.path.join(UV_PATH, "pyproject.toml")
+        assert os.path.exists(toml_path), f"Missing {toml_path}"
+        with open(toml_path) as f:
+            content = f.read()
+        assert 'name = "rlinf"' in content, "pyproject.toml does not declare rlinf"
+        print(f"  OK: {toml_path} declares rlinf project")
+        install_sh = os.path.join(UV_PATH, "requirements", "install.sh")
+        assert os.path.exists(install_sh), f"Missing {install_sh}"
+        print(f"  OK: {install_sh}")
+    run_test("RLinf Project Structure", test_rlinf_project)
+
+    # Test 6: ManiSkill3
+    def test_maniskill():
+        for venv in ["openvla", "openvla-oft"]:
+            python = os.path.join(UV_PATH, venv, "bin", "python3")
+            if not os.path.exists(python):
+                continue
+            result = subprocess.run(
+                [python, "-c",
+                 "import mani_skill; print(getattr(mani_skill, '__version__', 'ok'))"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                print(f"  ManiSkill {result.stdout.strip()} (from venv {venv})")
+                return
+        raise RuntimeError("ManiSkill not found in any venv")
+    run_test("ManiSkill3", test_maniskill)
+
+    # Test 7: EKS Scripts
+    # Upstream source (examples/) is not baked into the image;
+    # only EKS-specific scripts are COPY'd by our Stage 2 Dockerfile.
+    def test_paths():
+        paths = [
+            "/workspace/eks/scripts/run_training_eks.sh",
+        ]
+        missing = []
+        for p in paths:
+            if os.path.exists(p):
+                print(f"  OK: {p}")
+            else:
+                print(f"  MISSING: {p}")
+                missing.append(p)
+        assert not missing, f"Missing files: {missing}"
+    run_test("EKS Scripts", test_paths)
+
+    # Test 8: FSx Access
+    def test_fsx():
+        test_file = f"/fsx/container-test-{os.getpid()}"
+        with open(test_file, "w") as f:
+            f.write("container-test")
+        with open(test_file, "r") as f:
+            content = f.read()
+        os.remove(test_file)
+        assert content == "container-test", f"Read back wrong content: {content}"
+        print("  FSx write/read/delete OK")
+    run_test("FSx Access", test_fsx)
+
+    # Test 9: Ray
+    def test_ray():
+        for venv in ["openvla", "openvla-oft", "openpi"]:
+            python = os.path.join(UV_PATH, venv, "bin", "python3")
+            if not os.path.exists(python):
+                continue
+            result = subprocess.run(
+                [python, "-c", "import ray; print(ray.__version__)"],
+                capture_output=True, text=True, timeout=30
+            )
+            if result.returncode == 0:
+                print(f"  Ray {result.stdout.strip()} (from venv {venv})")
+                return
+        raise RuntimeError("Ray not found in any venv")
+    run_test("Ray", test_ray)
+
+    # Test 10: OpenMPI (for multi-node)
+    def test_openmpi():
+        result = subprocess.run(
+            ["/opt/amazon/openmpi/bin/mpirun", "--version"],
+            capture_output=True, text=True, timeout=10
+        )
+        assert result.returncode == 0, f"mpirun failed: {result.stderr}"
+        version_line = result.stdout.strip().split("\n")[0]
+        print(f"  {version_line}")
+    run_test("OpenMPI", test_openmpi)
+
+    # Summary
+    print("\n" + "=" * 44)
+    total = PASS + FAIL
+    print(f"  Results: {PASS} passed, {FAIL} failed (of {total})")
+    print("=" * 44)
+    if FAIL > 0:
+        print("CONTAINER TEST FAILED")
+        sys.exit(1)
+    else:
+        print("CONTAINER TEST PASSED")
+        sys.exit(0)

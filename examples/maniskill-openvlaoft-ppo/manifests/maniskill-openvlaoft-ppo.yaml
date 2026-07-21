@@ -1,0 +1,97 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# ManiSkill + OpenVLA-OFT PPO
+#
+# Same container image as OpenVLA example, different venv and config.
+# Trains OpenVLA-OFT (fine-tuned variant) on ManiSkill3 using PPO.
+# Uses FULL config with split placement (actor: 0-7, env: 0-3, rollout: 4-7)
+# for maximum parallelism: 128 envs, global_batch_size=640.
+#
+# Image: embodied-maniskill_libero (same image as all PPO examples)
+# Venv:  openvla-oft
+# Config: maniskill_ppo_openvlaoft (full 8-GPU split placement)
+#
+# Prerequisites:
+#   - model-download.yaml completed (downloads openvla-oft-sft-libero10)
+#
+# Usage:
+#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   envsubst < examples/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rlinf-maniskill-openvlaoft
+  namespace: ${NAMESPACE}
+  labels:
+    app: rlinf
+    reference: rlinf
+    example: maniskill-openvlaoft-ppo
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: rlinf
+        example: maniskill-openvlaoft-ppo
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: training-sa
+      nodeSelector:
+        node.kubernetes.io/instance-type: p5en.48xlarge
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: training
+          image: ${ECR_URI}:latest
+          command:
+            - bash
+            - -c
+            - |
+              cd /workspace/RLinf
+              exec bash /workspace/eks/scripts/run_training_eks.sh
+          env:
+            - name: CONFIG_NAME
+              value: "maniskill_ppo_openvlaoft"
+            - name: VENV_NAME
+              value: "openvla-oft"
+            - name: MODEL_PATH
+              value: "/fsx/models/openvla-oft-sft-libero10"
+            - name: HYDRA_OVERRIDES
+              value: "actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora env.train.max_steps_per_rollout_epoch=160"
+            - name: NUM_GPUS
+              value: "8"
+            - name: NUM_NODES
+              value: "1"
+            - name: CKPT_PATH
+              value: "/fsx/checkpoints"
+            - name: MANISKILL_ASSET_DIR
+              value: "/fsx/assets/maniskill"
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+          resources:
+            requests:
+              nvidia.com/gpu: 8
+              cpu: "90"
+              memory: "1000Gi"
+            limits:
+              nvidia.com/gpu: 8
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "64Gi"

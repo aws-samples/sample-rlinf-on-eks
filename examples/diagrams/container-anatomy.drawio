@@ -1,0 +1,112 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram name="Container Anatomy" id="container-anatomy">
+    <mxGraphModel dx="1347" dy="869" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="RLinf-on-EKS Container Anatomy (Two-Stage Build)" vertex="1">
+          <mxGeometry height="30" width="500" x="350" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="stage1_label" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Stage 1: Upstream RLinf (docker/Dockerfile)" vertex="1">
+          <mxGeometry height="20" width="350" x="50" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="stage2_label" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Stage 2: EFA Overlay (examples/Dockerfile)" vertex="1">
+          <mxGeometry height="20" width="350" x="650" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="container" parent="1" style="swimlane;startSize=28;html=1;fontSize=13;fontStyle=1;rounded=0;arcSize=4;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Final Container Image" vertex="1">
+          <mxGeometry height="670" width="1240" x="50" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="base" parent="container" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04&lt;/b&gt;&lt;br&gt;CUDA 12.4 | cuDNN | Ubuntu 22.04" vertex="1">
+          <mxGeometry height="50" width="300" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="venvs" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="/opt/venv/ (Multi-Venv via uv)" vertex="1">
+          <mxGeometry height="170" width="560" x="20" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="venv_openvla" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;openvla&lt;/b&gt;&lt;br&gt;PyTorch 2.6.0&lt;br&gt;Ray &gt;=2.47&lt;br&gt;transformers &lt;4.46&lt;br&gt;ManiSkill3&lt;br&gt;MuJoCo + SAPIEN" vertex="1">
+          <mxGeometry height="80" width="120" x="14" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="venv_oft" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;openvla-oft&lt;/b&gt;&lt;br&gt;PyTorch 2.6.0&lt;br&gt;Ray &gt;=2.47&lt;br&gt;transformers &lt;4.46&lt;br&gt;ManiSkill3&lt;br&gt;OFT adapters" vertex="1">
+          <mxGeometry height="80" width="120" x="144" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="venv_openpi" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;openpi&lt;/b&gt;&lt;br&gt;PyTorch 2.6.0&lt;br&gt;Ray &gt;=2.47&lt;br&gt;LIBERO&lt;br&gt;robosuite 1.4.1&lt;br&gt;pi0 model deps" vertex="1">
+          <mxGeometry height="80" width="120" x="274" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="venv_other" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;gr00t / dexbotic / starvla&lt;/b&gt;&lt;br&gt;(future models)&lt;br&gt;&lt;br&gt;Same pattern:&lt;br&gt;isolated deps per model" vertex="1">
+          <mxGeometry height="80" width="140" x="404" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="venv_note" parent="venvs" style="text;html=1;align=left;fontSize=10;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Activated by:&amp;nbsp;&lt;/b&gt;&lt;div&gt;source /opt/venv/${VENV_NAME}/bin/activate&lt;br&gt;or: source switch_env openvla&lt;/div&gt;" vertex="1">
+          <mxGeometry height="50" width="230" x="10" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="rlinf_note" parent="venvs" style="text;html=1;align=left;fontSize=10;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;RLinf installed editable into ALL venvs:&lt;/b&gt;&lt;br&gt;pip install --no-deps -e /workspace/RLinf" vertex="1">
+          <mxGeometry height="40" width="220" x="250" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="rlinf_src" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="/workspace/RLinf/ (veRL fork, editable install)" vertex="1">
+          <mxGeometry height="150" width="560" x="20" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="rlinf_verl" parent="rlinf_src" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;verl/&lt;/b&gt; (PPO framework)&lt;br&gt;&lt;br&gt;trainer/main_ppo.py&lt;br&gt;trainer/ppo/ray_trainer.py&lt;br&gt;workers/fsdp_workers.py&lt;br&gt;workers/rollout/rob_rollout.py&lt;br&gt;workers/actor/dp_rob.py&lt;br&gt;trainer/ppo/core_algos.py" vertex="1">
+          <mxGeometry height="110" width="140" x="61" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="rlinf_examples" parent="rlinf_src" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;examples/embodiment/&lt;/b&gt;&lt;br&gt;&lt;br&gt;train_embodied_agent.py&lt;br&gt;&lt;br&gt;config/&lt;br&gt;  maniskill_ppo_openvla_*&lt;br&gt;  maniskill_ppo_openvlaoft_*&lt;br&gt;  libero_spatial_ppo_openpi_*&lt;br&gt;  libero_sft_dreamzero_14b" vertex="1">
+          <mxGeometry height="110" width="130" x="371" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="rlinf_key" parent="rlinf_src" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key Innovations&lt;/b&gt;&lt;br&gt;&lt;br&gt;Macro-to-micro flow&lt;br&gt;(2.4x throughput)&lt;br&gt;RobActorRolloutRefWorker&lt;br&gt;RobDataParallelPPOActor&lt;br&gt;RobHFRollout&lt;br&gt;Dynamic sampling filter&lt;br&gt;Asymmetric PPO clipping" vertex="1">
+          <mxGeometry height="110" width="127.5" x="221" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="dreamzero_src" parent="container" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/workspace/DreamZero/&lt;/b&gt; (groot package; SEPARATE image: BUILD_TARGET=embodied-libero + dreamzero venv)&lt;br&gt;&lt;br&gt;Cloned by buildspec, on PYTHONPATH via DREAMZERO_PATH (not pip-installed here)&lt;br&gt;Wan2.1-I2V DiT + VAE + action head | trained with FSDP2 full_shard (not DeepSpeed)" vertex="1">
+          <mxGeometry height="80" width="560" x="20" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="efa_stack" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="EFA / NCCL Networking Stack (Stage 2)" vertex="1">
+          <mxGeometry height="170" width="620" x="600" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="efa" parent="efa_stack" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/opt/amazon/efa/&lt;/b&gt;&lt;br&gt;&lt;br&gt;EFA Installer 1.47.0&lt;br&gt;libfabric 2.4.0amzn1.0&lt;br&gt;(RDMA + DMA-BUF)" vertex="1">
+          <mxGeometry height="80" width="110" x="10" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ofi_nccl" parent="efa_stack" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/opt/amazon/ofi-nccl/&lt;/b&gt;&lt;br&gt;&lt;br&gt;aws-ofi-nccl 1.18.0&lt;br&gt;NCCL tuner plugin&lt;br&gt;(bridges NCCL↔libfabric)" vertex="1">
+          <mxGeometry height="80" width="115" x="140" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="nccl" parent="efa_stack" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/opt/nccl/build/&lt;/b&gt;&lt;br&gt;&lt;br&gt;NCCL v2.21.5-1&lt;br&gt;(source-built)&lt;br&gt;sm_80/86/89/90&lt;br&gt;LD_PRELOAD&#39;d" vertex="1">
+          <mxGeometry height="80" width="95" x="280" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="gdrcopy" parent="efa_stack" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/opt/gdrcopy/&lt;/b&gt;&lt;br&gt;&lt;br&gt;GDRCopy v2.5.1&lt;br&gt;GPU Direct RDMA&lt;br&gt;(userspace only)" vertex="1">
+          <mxGeometry height="80" width="100" x="390" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="openmpi" parent="efa_stack" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/opt/amazon/openmpi/&lt;/b&gt;&lt;br&gt;&lt;br&gt;OpenMPI 4 + 5&lt;br&gt;MPI launcher&lt;br&gt;(for MPIJob CRDs)" vertex="1">
+          <mxGeometry height="80" width="110" x="500" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="efa_flow" parent="efa_stack" style="text;html=1;align=left;fontSize=10;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Data flow:&lt;/b&gt;&amp;nbsp;&lt;div&gt;NCCL → aws-ofi-nccl → libfabric → EFA NIC → RDMA&lt;/div&gt;" vertex="1">
+          <mxGeometry height="40" width="280" x="10" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="eks_scripts" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="/workspace/eks/scripts/ (EKS launchers, Stage 2)" vertex="1">
+          <mxGeometry height="160" width="620" x="600" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="launcher_ppo" parent="eks_scripts" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;run_training_eks.sh&lt;/b&gt;&lt;br&gt;&lt;br&gt;Activates venv&lt;br&gt;Sets EFA env vars&lt;br&gt;Verifies model weights&lt;br&gt;Calls train_embodied_agent.py&lt;br&gt;Passes HYDRA_OVERRIDES" vertex="1">
+          <mxGeometry height="112" width="140" x="81" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="launcher_sft" parent="eks_scripts" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;run_dreamzero_sft_eks.sh&lt;/b&gt;&lt;br&gt;&lt;br&gt;(ConfigMap-mounted at&lt;br&gt;/tmp/scripts/ at runtime)&lt;br&gt;Ray-agnostic launcher&lt;br&gt;invokes entrypoint once&lt;br&gt;on Ray head (no torchrun);&lt;br&gt;RLinf Cluster scheduler&lt;br&gt;fans FSDP2 across nodes" vertex="1">
+          <mxGeometry height="112" width="135" x="241" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="launcher_util" parent="eks_scripts" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;install_extras.sh&lt;/b&gt;&lt;br&gt;&lt;br&gt;Called during docker build&lt;br&gt;Installs RLinf editable&lt;br&gt;(--no-deps) into all venvs&lt;br&gt;&lt;br&gt;DreamZero deps come from&lt;br&gt;upstream (install.sh --env&lt;br&gt;wan) + groot on PYTHONPATH" vertex="1">
+          <mxGeometry height="112" width="135" x="401" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime_mounts" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Runtime Mounts (not in image)" vertex="1">
+          <mxGeometry height="90" width="620" x="600" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="fsx_mount" parent="runtime_mounts" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/fsx&lt;/b&gt; (FSx for Lustre PVC)&lt;br&gt;/fsx/models/ | /fsx/datasets/ | /fsx/checkpoints/" vertex="1">
+          <mxGeometry height="50" width="300" x="40" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="efa_dev" parent="runtime_mounts" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;EFA devices&lt;/b&gt;&lt;br&gt;vpc.amazonaws.com/efa: 4-16" vertex="1">
+          <mxGeometry height="50" width="160" x="400" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="env_vars" parent="container" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key Environment Variables&lt;/b&gt;&lt;br&gt;&lt;br&gt;LD_PRELOAD=/opt/nccl/build/lib/libnccl.so&lt;br&gt;LD_LIBRARY_PATH=...efa...ofi-nccl...gdrcopy...&lt;br&gt;FI_EFA_USE_HUGE_PAGE=0&lt;br&gt;NCCL_TUNER_PLUGIN=/opt/amazon/ofi-nccl/lib/libnccl-ofi-tuner.so&lt;br&gt;MUJOCO_GL=osmesa | PYOPENGL_PLATFORM=osmesa&lt;br&gt;PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True" vertex="1">
+          <mxGeometry height="100" width="560" x="20" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flow" edge="1" parent="container" style="rounded=0;html=1;strokeWidth=2;entryX=1;entryY=0.273;entryDx=0;entryDy=0;entryPerimeter=0;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="rlinf_examples" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;calls&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.3411" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="680" y="360" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,89 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Download Model Weights for LIBERO Spatial + pi0 PPO
+#
+# Downloads the pi0 SFT checkpoint (pre-trained on LIBERO Spatial/Object/Goal).
+# LIBERO dataset is auto-downloaded on first training run, but you can
+# pre-stage it for faster startup.
+#
+# Prerequisites:
+#   - FSx for Lustre PVC (fsx-claim) available in the rlinf namespace
+#
+# Usage:
+#   export NAMESPACE=rlinf  # or your namespace
+#   envsubst < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   kubectl logs -f job/model-download-libero-pi0 -n $NAMESPACE
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-libero-pi0
+  namespace: ${NAMESPACE}
+  labels:
+    app: model-download
+    example: libero-pi0-ppo
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  LIBERO + pi0: Model Download"
+              echo "============================================"
+
+              pip install -q huggingface_hub
+
+              download_model() {
+                local model_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Model: $model_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/config.json" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$model_id',
+                  local_dir='$target_dir',
+                  local_dir_use_symlinks=False,
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              # Model: pi0 SFT checkpoint (Spatial + Object + Goal)
+              download_model "RLinf/RLinf-Pi0-LIBERO-Spatial-Object-Goal-SFT" "/fsx/models/rlinf-pi0-sft-spatial"
+
+              echo ""
+              echo "=== Download complete ==="
+              echo "Models:"
+              du -sh /fsx/models/rlinf-pi0-sft-spatial 2>/dev/null || echo "  (not found)"
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

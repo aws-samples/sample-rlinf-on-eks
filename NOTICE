@@ -1,0 +1,11 @@
+RLinf-on-EKS
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+This product is licensed under the MIT-0 License (see LICENSE).
+
+This sample references, but does not distribute, third-party software and
+machine-learning artifacts that are downloaded by the user at build/deploy time,
+including the RLinf framework (github.com/RLinf/RLinf) and models/datasets hosted
+on Hugging Face. Those artifacts are governed by their own licenses; review them
+before use. In particular, the GEAR-Dreams/DreamZero-DROID model is released under
+a non-commercial license (CC-BY-NC-4.0).

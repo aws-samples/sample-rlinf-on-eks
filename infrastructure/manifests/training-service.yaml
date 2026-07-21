@@ -1,0 +1,28 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# RLinf Headless Service for Multi-Node Training
+#
+# Provides DNS-based pod discovery for Ray head/worker communication.
+# Apply before the StatefulSet.
+apiVersion: v1
+kind: Service
+metadata:
+  name: training-svc
+  namespace: rlinf
+  labels:
+    app: rlinf-multi
+spec:
+  clusterIP: None
+  selector:
+    app: rlinf-multi
+  ports:
+    - name: ray-head
+      port: 6379
+      targetPort: 6379
+    - name: ray-dashboard
+      port: 8265
+      targetPort: 8265
+    - name: ray-client
+      port: 10001
+      targetPort: 10001

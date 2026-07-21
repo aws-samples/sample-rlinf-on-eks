@@ -1,0 +1,107 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram name="OpenVLA-OFT PPO" id="openvlaoft-ppo">
+    <mxGraphModel dx="1414" dy="912" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=14;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;ManiSkill + OpenVLA-OFT PPO: Parameter-Efficient RL&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="500" x="450" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="policy_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Policy (OpenVLA-OFT 7B)" vertex="1">
+          <mxGeometry height="360" width="300" x="104" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vit" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;DINOv2 + SigLIP (Fused)&lt;/b&gt;&lt;br&gt;(Vision Encoder)&lt;br&gt;224x224 RGB → patches" vertex="1">
+          <mxGeometry height="50" width="130" x="85" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="projector" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Projector&lt;/b&gt;&lt;br&gt;vision → LLM space" vertex="1">
+          <mxGeometry height="40" width="130" x="85" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Llama 2 (7B) + LoRA Adapters&lt;/b&gt;&lt;br&gt;&lt;br&gt;Optimized Fine-Tuning (OFT):&lt;br&gt;LoRA rank-32 on LLM layers&lt;br&gt;Only LoRA params trained during RL&lt;br&gt;&lt;br&gt;Preserves pre-trained features&lt;br&gt;while enabling task adaptation" vertex="1">
+          <mxGeometry height="120" width="260" x="20" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="detok" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;MLP Action Head&lt;/b&gt;&lt;br&gt;L1 regression → continuous actions&lt;br&gt;(replaces discrete tokenization)" vertex="1">
+          <mxGeometry height="45" width="185" x="57.5" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="e_vit_proj" edge="1" parent="policy_block" source="vit" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="projector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_proj_llm" edge="1" parent="policy_block" source="projector" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_llm_detok" edge="1" parent="policy_block" source="llm" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="detok">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sim_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Simulator (ManiSkill3)" vertex="1">
+          <mxGeometry height="300" width="280" x="560" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="task" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Task: Pick Cube&lt;/b&gt;&lt;br&gt;obs: RGB image + proprioception&lt;br&gt;action: 7-DoF end-effector delta&lt;br&gt;reward: dense (reaching + grasping)" vertex="1">
+          <mxGeometry height="80" width="240" x="20" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="render" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;GPU Rendering&lt;/b&gt;&lt;br&gt;osmesa / headless&lt;br&gt;224x224 RGB observations" vertex="1">
+          <mxGeometry height="60" width="240" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="sim_gpu" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;GPU-Accelerated Physics&lt;/b&gt;&lt;br&gt;SAPIEN / MuJoCo backend&lt;br&gt;Parallel vectorized envs" vertex="1">
+          <mxGeometry height="70" width="240" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="ppo_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="PPO Algorithm" vertex="1">
+          <mxGeometry height="330" width="280" x="950" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="buffer" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Rollout Buffer&lt;/b&gt;&lt;br&gt;(obs, act, reward, logprob, value)&lt;br&gt;Collected during rollout phase" vertex="1">
+          <mxGeometry height="60" width="240" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="gae" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;GAE Advantage Estimation&lt;/b&gt;&lt;br&gt;A(t) = Σ (γλ)^k · δ(t+k)" vertex="1">
+          <mxGeometry height="50" width="240" x="20" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="clip" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Clipped Surrogate Loss&lt;/b&gt;&lt;br&gt;L = min(r·A, clip(r, 1±ε)·A)&lt;br&gt;&lt;br&gt;&lt;b&gt;Gradients flow to LoRA + action head&lt;/b&gt;&lt;br&gt;(backbone frozen)" vertex="1">
+          <mxGeometry height="80" width="240" x="20" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="value_fn" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Value Function Loss&lt;/b&gt;&lt;br&gt;L_vf = (V(s) - R_target)²" vertex="1">
+          <mxGeometry height="45" width="240" x="20" y="268" as="geometry" />
+        </mxCell>
+        <mxCell id="e_buf_gae" edge="1" parent="ppo_block" source="buffer" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="gae">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gae_clip" edge="1" parent="ppo_block" source="gae" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="clip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_policy_sim" edge="1" parent="1" source="detok" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="task" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;continuous actions (7-DoF)&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="480" y="383" />
+              <mxPoint x="480" y="210" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sim_policy" edge="1" parent="1" source="render" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="vit" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;RGB observation&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.1571" y="-5" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="470" y="120" />
+              <mxPoint x="470" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sim_ppo" edge="1" parent="1" source="task" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="buffer" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;(s, a, r, done)&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="200" />
+              <mxPoint x="900" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ppo_policy" edge="1" parent="1" source="clip" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="llm" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;∇LoRA (adapter gradients only)&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="900" y="280" />
+              <mxPoint x="900" y="450" />
+              <mxPoint x="140" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note_oft" parent="1" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;rounded=0;fontSize=11;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key Difference: Optimized Fine-Tuning (OFT) Recipe&lt;/b&gt;&lt;br&gt;- Pre-trained backbone weights are frozen during RL&lt;br&gt;- LoRA (rank-32) adapters on LLM layers are trainable&lt;br&gt;- MLP action head: continuous L1 regression output&lt;br&gt;- Parallel decoding with action chunking (8 steps)&lt;br&gt;- No discrete tokenization (unlike base OpenVLA)&lt;br&gt;- Much fewer trainable params than full fine-tuning&lt;br&gt;&lt;br&gt;&lt;b&gt;SFT checkpoint:&lt;/b&gt; openvla-oft-sft-libero10&lt;br&gt;(pre-trained on LIBERO-10, transferred to ManiSkill via LoRA adapter)" vertex="1">
+          <mxGeometry height="150" width="350" x="40" y="470" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,153 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# =============================================================================
+# NCCL AllReduce Performance Test (MPIJob)
+#
+# Uses the Kubeflow MPI Operator to run all_reduce_perf across multi-node
+# GPU instances with EFA. Pattern from awslabs/awsome-distributed-ai.
+#
+# Image: Pre-built on public ECR (no need to build your own):
+#   public.ecr.aws/hpc-cloud/nccl-tests:cuda12.8.1-efa1.43.2-ofiv1.16.3-ncclv2.27.7-1-testsv2.16.9
+#
+# Upstream reference:
+#   https://github.com/awslabs/awsome-distributed-ai/tree/main/micro-benchmarks/nccl-tests
+#
+# Prerequisites:
+#   1. Kubeflow MPI Operator installed (addons layer enables it)
+#   2. EFA device plugin running (GPU Operator)
+#   3. NVIDIA GPU Operator running
+#
+# Usage:
+#   export NCCL_TEST_IMAGE=public.ecr.aws/hpc-cloud/nccl-tests:cuda12.8.1-efa1.43.2-ofiv1.16.3-ncclv2.27.7-1-testsv2.16.9
+#   envsubst '${NCCL_TEST_IMAGE}' < infrastructure/manifests/nccl-tests-mpijob.yaml | kubectl apply -f -
+#   kubectl logs -f $(kubectl get pods | grep launcher | cut -d ' ' -f 1)
+#   kubectl delete mpijob nccl-tests
+#
+# Adjust for your instance type:
+#   g6.8xlarge:   slotsPerWorker=1, -np=2,  -N=1, gpu=1, efa=1,  hugepages=5120Mi
+#   p4de.24xl:    slotsPerWorker=8, -np=16, -N=8, gpu=8, efa=4,  hugepages=5120Mi
+#   p5.48xlarge:  slotsPerWorker=8, -np=16, -N=8, gpu=8, efa=32, hugepages=5120Mi
+#   p5en.48xlarge: slotsPerWorker=8, -np=16, -N=8, gpu=8, efa=16, hugepages=5120Mi
+#
+# Expected results (2x p5.48xlarge, 1GB allreduce): ~437 GB/s BusBW
+# Expected results (2x g6.8xlarge, 1GB allreduce):  ~2-3 GB/s BusBW
+# =============================================================================
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-tests
+spec:
+  runPolicy:
+    cleanPodPolicy: Running
+    backoffLimit: 20
+  # --------------------------------------------------------------------------
+  # slotsPerWorker = GPUs per node
+  # For g6.8xlarge (1 GPU):  set to 1
+  # For p5.48xlarge (8 GPUs): set to 8
+  # --------------------------------------------------------------------------
+  slotsPerWorker: 1
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - image: ${NCCL_TEST_IMAGE}
+              imagePullPolicy: IfNotPresent
+              name: nccl-tests-launcher
+              env:
+                # NOTE: These env vars must survive envsubst without expansion.
+                # We use explicit absolute paths (no $VAR references) since
+                # envsubst would replace $PATH/$LD_LIBRARY_PATH with local values.
+                # Include all possible ofi-nccl paths (lib/, lib64/, lib/x86_64-linux-gnu/)
+                # to support different EFA installer versions and base OSes.
+                - name: LD_LIBRARY_PATH
+                  value: /opt/amazon/openmpi/lib:/opt/nccl/build/lib:/opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/opt/amazon/ofi-nccl/lib64:/opt/amazon/ofi-nccl/lib/x86_64-linux-gnu:/opt/gdrcopy/lib:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/lib
+              command:
+                - /opt/amazon/openmpi/bin/mpirun
+                - --allow-run-as-root
+                - --tag-output
+                - -np
+                # Total GPUs = workers * GPUs_per_worker
+                # g6.8xlarge:  2 workers * 1 GPU = 2
+                # p5.48xlarge: 2 workers * 8 GPU = 16
+                - "2"
+                - -N
+                # GPUs per worker
+                - "1"
+                - --bind-to
+                - none
+                - -x
+                - LD_LIBRARY_PATH
+                - -x
+                - FI_PROVIDER=efa
+                - -x
+                - FI_EFA_FORK_SAFE=1
+                - -x
+                - NCCL_DEBUG=INFO
+                - -x
+                - NCCL_BUFFSIZE=8388608
+                - -x
+                - NCCL_P2P_NET_CHUNKSIZE=524288
+                - --mca
+                - pml
+                - ^ucx
+                - --mca
+                - btl
+                - tcp,self
+                - --mca
+                - btl_tcp_if_exclude
+                - lo,docker0,veth_def_agent
+                # --mca mtl ^ofi: Prevent OpenMPI from using EFA for MPI messaging.
+                # On single-EFA instances (g6), MPI and NCCL conflict over the one EFA device.
+                # On multi-EFA instances (p5, 32x EFA), this may be unnecessary -- test both.
+                - --mca
+                - mtl
+                - ^ofi
+                - /opt/nccl-tests/build/all_reduce_perf
+                - -b
+                - "8"
+                - -e
+                - "1G"
+                - -f
+                - "2"
+                - -g
+                - "1"
+                - -c
+                - "1"
+                - -n
+                - "100"
+    Worker:
+      replicas: 2
+      template:
+        spec:
+          nodeSelector:
+            role: gpu-training
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - image: ${NCCL_TEST_IMAGE}
+              imagePullPolicy: IfNotPresent
+              name: nccl-tests-worker
+              volumeMounts:
+                - name: shmem
+                  mountPath: /dev/shm
+              resources:
+                limits:
+                  nvidia.com/gpu: 1
+                  hugepages-2Mi: 5120Mi
+                  vpc.amazonaws.com/efa: 1
+                  memory: 8Gi
+                requests:
+                  nvidia.com/gpu: 1
+                  hugepages-2Mi: 5120Mi
+                  vpc.amazonaws.com/efa: 1
+                  memory: 8Gi
+          volumes:
+            - name: shmem
+              hostPath:
+                path: /dev/shm

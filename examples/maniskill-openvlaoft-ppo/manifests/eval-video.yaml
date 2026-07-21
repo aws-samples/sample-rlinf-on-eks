@@ -1,0 +1,153 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Eval-only job to regenerate OFT showcase video matching OpenVLA format.
+#
+# Produces a 7-tile (single row) video at ~1370 frames / 5fps (raw). The raw video
+# contains ~170 real motion frames interleaved with 7 duplicate frames each (due to
+# num_action_chunks=8). Post-processing strips duplicates to produce smooth playback.
+#
+# Uses eval_embodied_agent.py (only_eval=True) with pipeline_stage_num=2 to match
+# the OpenVLA video layout (16 envs ÷ 4 GPUs ÷ 2 stages = 2 envs/stage → 7 tiles
+# via ManiSkill RecordVideo tiling after stage merge).
+#
+# Prerequisites:
+#   - Checkpoint on FSx (from training run)
+#   - Model weights at /fsx/models/openvla-oft-sft-libero10 (from model-download.yaml)
+#   - LoRA weights on FSx (produced during training)
+#   - ManiSkill assets at /fsx/assets/maniskill
+#
+# Usage:
+#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export NAMESPACE=rlinf
+#   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
+#   export LORA_PATH=/fsx/checkpoints/<run>/.../lora_weights/
+#   ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
+#
+# Output:
+#   Raw video at /fsx/checkpoints/openvlaoft-eval-video/video/eval/seed_*/0.mp4
+#
+# Post-processing (strip duplicate frames, keep every 8th):
+#   ffmpeg -i raw.mp4 \
+#     -vf "select='not(mod(n\,8))',setpts=N/FRAME_RATE/TB" \
+#     -r 5 -c:v libx264 -pix_fmt yuv420p -crf 28 -preset slow \
+#     -y assets/maniskill_openvlaoft_success.mp4
+#
+#   Result: ~173 frames, 5fps, 34.6s, 3584x512 (matches OpenVLA showcase video)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rlinf-openvlaoft-eval-video
+  namespace: ${NAMESPACE}
+  labels:
+    app: rlinf
+    example: maniskill-openvlaoft-ppo
+    purpose: eval-video
+  annotations:
+    rlinf.io/num-action-chunks: "8"
+    rlinf.io/video-output-path: "openvlaoft-eval-video"
+    rlinf.io/asset-filename: "maniskill_openvlaoft_success.mp4"
+    rlinf.io/s3-bucket: "${S3_BUCKET}"
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: rlinf
+        example: maniskill-openvlaoft-ppo
+        purpose: eval-video
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: training-sa
+      nodeSelector:
+        node.kubernetes.io/instance-type: p5en.48xlarge
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: eval
+          image: ${ECR_URI}:latest
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              set -x
+
+              # Activate venv
+              export PYTHONPATH="${PYTHONPATH:-}"
+              source /opt/venv/openvla-oft/bin/activate
+
+              # Environment
+              export MUJOCO_GL=osmesa
+              export PYOPENGL_PLATFORM=osmesa
+              export NVIDIA_DRIVER_CAPABILITIES=all
+              export LD_LIBRARY_PATH="/usr/lib64:${LD_LIBRARY_PATH:-}"
+              export NCCL_DEBUG=WARN
+              export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+              export EMBODIED_PATH=/workspace/RLinf/examples/embodiment
+
+              # Link simulator assets
+              if [ -x "/usr/local/bin/link_assets" ]; then link_assets; fi
+
+              cd /workspace/RLinf
+
+              # Run eval with video recording.
+              # Key overrides to match OpenVLA video format:
+              #   rollout.pipeline_stage_num=2    → matches OpenVLA rollout config
+              #   env.eval.enable_offload=True    → uses ManiskillOffloadEnv (capture_image at 512×512)
+              #   env.eval.total_num_envs=16      → 16 envs across 4 GPUs × 2 stages
+              #   env.eval.max_steps_per_rollout_epoch=1360  → 17x episode length to accumulate
+              #     ~170 real motion frames (OFT chunks 8 actions, so only every 8th frame has motion)
+              #   env.eval.video_cfg.save_video=True
+              #
+              # Post-processing required: strip duplicate frames (keep every 8th) to produce
+              # a smooth video matching OpenVLA's frame-per-step format. See header comment.
+              python3 examples/embodiment/eval_embodied_agent.py \
+                --config-path config \
+                --config-name maniskill_ppo_openvlaoft \
+                runner.logger.log_path=/fsx/checkpoints/openvlaoft-eval-video \
+                runner.ckpt_path=${CKPT_PATH} \
+                actor.model.model_path=/fsx/models/openvla-oft-sft-libero10 \
+                actor.model.lora_path=${LORA_PATH} \
+                rollout.model.model_path=/fsx/models/openvla-oft-sft-libero10 \
+                rollout.pipeline_stage_num=2 \
+                rollout.enable_offload=True \
+                env.eval.enable_offload=True \
+                env.eval.total_num_envs=16 \
+                env.eval.max_steps_per_rollout_epoch=1360 \
+                env.eval.video_cfg.save_video=True \
+                algorithm.eval_rollout_epoch=1 \
+                cluster.num_nodes=1
+
+              echo "=== Eval complete. Videos at /fsx/checkpoints/openvlaoft-eval-video/video/ ==="
+              ls -la /fsx/checkpoints/openvlaoft-eval-video/video/eval/seed_*/0.mp4 2>/dev/null || \
+                find /fsx/checkpoints/openvlaoft-eval-video -name "*.mp4" -ls
+          env:
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+            - name: MANISKILL_ASSET_DIR
+              value: "/fsx/assets/maniskill"
+          resources:
+            requests:
+              nvidia.com/gpu: 8
+              cpu: "90"
+              memory: "1000Gi"
+            limits:
+              nvidia.com/gpu: 8
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "64Gi"

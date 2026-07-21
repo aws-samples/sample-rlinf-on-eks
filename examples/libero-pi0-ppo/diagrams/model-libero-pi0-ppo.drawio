@@ -1,0 +1,108 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram name="LIBERO pi0 PPO" id="libero-pi0-ppo">
+    <mxGraphModel dx="1414" dy="912" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=14;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;LIBERO + pi0 PPO: Flow-Matching Policy with RL&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="450" x="475" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="policy_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Policy (pi0 — Flow Matching VLA)" vertex="1">
+          <mxGeometry height="390" width="320" x="102" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vit" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;SigLIP ViT&lt;/b&gt;&lt;br&gt;(Vision Encoder)&lt;br&gt;Multi-view images → tokens" vertex="1">
+          <mxGeometry height="55" width="140" x="90" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="paligemma" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;PaliGemma 2B&lt;/b&gt;&lt;br&gt;(VLM backbone)&lt;br&gt;Fuses vision + language&lt;br&gt;Produces context embedding" vertex="1">
+          <mxGeometry height="75" width="270" x="25" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="flow" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Flow Matching Action Head&lt;/b&gt;&lt;br&gt;&lt;br&gt;Action Expert (Gemma 300M)&lt;br&gt;Iterative: x_T → x_0 (10 steps, δ=0.1)&lt;br&gt;Conditioned on VLM embedding&lt;br&gt;&lt;br&gt;Output: action chunk (H steps)" vertex="1">
+          <mxGeometry height="110" width="270" x="25" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="action_out" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Action Chunk&lt;/b&gt;&lt;br&gt;H future actions (continuous)" vertex="1">
+          <mxGeometry height="40" width="180" x="70" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="e_vit_pali" edge="1" parent="policy_block" source="vit" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="paligemma">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_pali_flow" edge="1" parent="policy_block" source="paligemma" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="flow">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_flow_act" edge="1" parent="policy_block" source="flow" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="action_out">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="sim_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Simulator (LIBERO)" vertex="1">
+          <mxGeometry height="310" width="280" x="560" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sim_env" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;LIBERO Environment&lt;/b&gt;&lt;br&gt;robosuite 1.4.1 backend&lt;br&gt;MuJoCo physics (headless)&lt;br&gt;Tabletop manipulation" vertex="1">
+          <mxGeometry height="80" width="240" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="task" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;LIBERO-Spatial Tasks&lt;/b&gt;&lt;br&gt;10 tasks with spatial reasoning&lt;br&gt;obs: RGB + proprioception&lt;br&gt;action: 7-DoF (xyz + rot + gripper)&lt;br&gt;reward: sparse (task success)" vertex="1">
+          <mxGeometry height="90" width="240" x="20" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="render" parent="sim_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Rendering&lt;/b&gt;&lt;br&gt;osmesa headless&lt;br&gt;agentview + eye-in-hand" vertex="1">
+          <mxGeometry height="55" width="240" x="20" y="28" as="geometry" />
+        </mxCell>
+        <mxCell id="ppo_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="PPO Algorithm (Flow-Aware)" vertex="1">
+          <mxGeometry height="330" width="280" x="958" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="buffer" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Rollout Buffer&lt;/b&gt;&lt;br&gt;(obs, action_chunk, reward, done)&lt;br&gt;On-policy trajectories (discarded after update)" vertex="1">
+          <mxGeometry height="60" width="240" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="gae" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;GAE Advantage Estimation&lt;/b&gt;&lt;br&gt;(adapted for action chunks)" vertex="1">
+          <mxGeometry height="50" width="240" x="20" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="clip" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Flow-Matching PPO Loss&lt;/b&gt;&lt;br&gt;Surrogate objective using Flow-SDE&lt;br&gt;(ODE→SDE for log-prob &amp;amp; exploration)&lt;br&gt;Clipped ratio on flow log-prob" vertex="1">
+          <mxGeometry height="75" width="240" x="20" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="value_fn" parent="ppo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Value Function&lt;/b&gt;&lt;br&gt;Separate critic head" vertex="1">
+          <mxGeometry height="45" width="240" x="20" y="268" as="geometry" />
+        </mxCell>
+        <mxCell id="e_buf_gae" edge="1" parent="ppo_block" source="buffer" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="gae">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_gae_clip" edge="1" parent="ppo_block" source="gae" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="clip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_policy_sim" edge="1" parent="1" source="action_out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="task" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;action chunk (7-DoF × H)&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="490" y="410" />
+              <mxPoint x="490" y="210" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sim_policy" edge="1" parent="1" source="render" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="vit" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;RGB observations&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.2742" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="480" y="116" />
+              <mxPoint x="480" y="116" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_sim_ppo" edge="1" parent="1" source="task" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="buffer" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;(s, a_chunk, r, done)&lt;/span&gt;">
+          <mxGeometry relative="1" x="-0.0717" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="900" y="205" />
+              <mxPoint x="900" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ppo_policy" edge="1" parent="1" source="clip" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="flow" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;∇θ (update flow model)&lt;/span&gt;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="910" y="280" />
+              <mxPoint x="910" y="470" />
+              <mxPoint x="150" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note_pi0" parent="1" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;rounded=0;fontSize=11;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key Difference: Flow Matching (pi0)&lt;/b&gt;&lt;br&gt;- Actions generated via iterative denoising (not AR tokens)&lt;br&gt;- PaliGemma VLM provides rich multi-modal context&lt;br&gt;- Action chunks: predict H future steps at once&lt;br&gt;- Flow log-probability replaces discrete logprobs in PPO&lt;br&gt;- Naturally outputs continuous actions (no binning)&lt;br&gt;&lt;br&gt;&lt;b&gt;SFT checkpoint:&lt;/b&gt; rlinf-pi0-sft-spatial&lt;br&gt;(pre-trained on LIBERO-Spatial demonstrations)" vertex="1">
+          <mxGeometry height="130" width="380" x="102" y="490" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

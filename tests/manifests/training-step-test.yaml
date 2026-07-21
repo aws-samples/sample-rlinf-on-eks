@@ -1,0 +1,156 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Training Step Test -- Single PPO Step Validation
+#
+# Runs exactly 1 PPO training step for a given RLinf example.
+# Parameterized via environment variables (set by the test harness).
+#
+# Parameters (set via envsubst):
+#   EXAMPLE_NAME  - e.g., maniskill-openvla
+#   VENV_NAME     - e.g., openvla, openvla-oft, openpi
+#   CONFIG_NAME   - e.g., maniskill_ppo_openvla_quickstart
+#   MODEL_PATH    - e.g., /fsx/models/openvla-7b-rlvla-warmup
+#   ECR_URI       - ECR image URI
+#
+# Usage:
+#   export EXAMPLE_NAME=maniskill-openvla VENV_NAME=openvla ...
+#   envsubst < tests/manifests/training-step-test.yaml | kubectl apply -f -
+#   kubectl logs -f job/training-step-test-${EXAMPLE_NAME}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: training-step-test-${EXAMPLE_NAME}
+  namespace: rlinf
+  labels:
+    app: training-step-test
+    example: ${EXAMPLE_NAME}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app: training-step-test
+        example: ${EXAMPLE_NAME}
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: test
+          image: ${ECR_URI}:latest
+          imagePullPolicy: Always
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  Training Step Test: ${EXAMPLE_NAME}"
+              echo "============================================"
+              echo "  Venv:   ${VENV_NAME}"
+              echo "  Config: ${CONFIG_NAME}"
+              echo "  Model:  ${MODEL_PATH}"
+              echo ""
+
+              # Activate the correct venv
+              UV_PATH="${UV_PATH:-/opt/venv}"
+              if [ -f "${UV_PATH}/${VENV_NAME}/bin/activate" ]; then
+                echo "Activating venv: ${VENV_NAME}"
+                source "${UV_PATH}/${VENV_NAME}/bin/activate"
+              elif [ -f "/usr/local/bin/switch_env" ]; then
+                echo "Activating via switch_env: ${VENV_NAME}"
+                source switch_env "${VENV_NAME}"
+              fi
+
+              echo "Python: $(which python3)"
+              echo "PyTorch: $(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || echo 'not found')"
+              echo ""
+
+              # Environment
+              export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
+              export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-osmesa}"
+              export NVIDIA_DRIVER_CAPABILITIES="${NVIDIA_DRIVER_CAPABILITIES:-all}"
+              export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+              export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+              export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-true}"
+
+              # Link simulator assets
+              if [ -x "/usr/local/bin/link_assets" ]; then
+                link_assets
+              fi
+
+              # Verify model
+              if [ ! -f "${MODEL_PATH}/config.json" ]; then
+                echo "ERROR: Model not found at ${MODEL_PATH}"
+                exit 1
+              fi
+
+              # Run 1 training step
+              cd /workspace
+              echo "=== Starting 1-step training ==="
+              python3 examples/embodiment/train_embodied_agent.py \
+                --config-path examples/embodiment/config/ \
+                --config-name "${CONFIG_NAME}" \
+                runner.max_steps=1 \
+                runner.save_interval=-1 \
+                runner.val_check_interval=-1 \
+                actor.model.model_path="${MODEL_PATH}" \
+                rollout.model.model_path="${MODEL_PATH}" \
+                cluster.num_nodes=1
+
+              echo ""
+              echo "============================================"
+              echo "  TRAINING_STEP_TEST_PASSED"
+              echo "============================================"
+          env:
+            - name: EXAMPLE_NAME
+              value: "${EXAMPLE_NAME}"
+            - name: VENV_NAME
+              value: "${VENV_NAME}"
+            - name: CONFIG_NAME
+              value: "${CONFIG_NAME}"
+            - name: MODEL_PATH
+              value: "${MODEL_PATH}"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+            - name: MLFLOW_TRACKING_URI
+              value: ""  # Disabled for tests
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: FI_PROVIDER
+              value: "efa"
+            - name: FI_EFA_USE_DEVICE_RDMA
+              value: "1"
+            - name: FI_EFA_FORK_SAFE
+              value: "1"
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+              cpu: "16"
+              memory: "64Gi"
+            limits:
+              nvidia.com/gpu: 1
+              vpc.amazonaws.com/efa: 1
+              cpu: "32"
+              memory: "128Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "16Gi"
