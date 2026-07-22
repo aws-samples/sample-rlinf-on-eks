@@ -177,7 +177,7 @@ DreamZero is a **World Action Model** -- a single 14B-parameter Diffusion Transf
 
 Trained on the DROID (Distributed Robot Interaction Dataset) dataset (real Franka Panda robot demonstrations from multiple labs), the model learns to predict both what will happen in the world (video) and what the robot should do (7-DOF (Degrees of Freedom) joint positions) — using video prediction as a computational scaffold for action reasoning.
 
-This example was validated end-to-end on EKS with a **1-step** SFT run, which exercises the full pipeline (build → stage → 2-node FSDP2 SFT over EFA → sharded DCP checkpoint → DCP→`.pt` conversion → LIBERO simulator eval + in-sim rollout video) rather than task accuracy. A 1-step checkpoint yields `eval/success_once = 0.0`, which is expected; real accuracy requires a multi-step run. No success numbers or loss curves are fabricated here.
+This example was validated end-to-end on EKS (build → stage → 2-node FSDP2 SFT over EFA → sharded DCP checkpoint → DCP→`.pt` conversion → LIBERO simulator eval + in-sim rollout video). A 300-step SFT run reduced `train/loss` 0.232 → 0.085 (~6.9 s/step) and wrote a 207 GB sharded checkpoint with no corruption — demonstrating the pipeline trains and converges. This is not a task-accuracy claim (300 steps is short; the released checkpoint trained for 100K); for real accuracy, train longer. No success numbers or loss curves are fabricated here.
 
 See [dreamzero/README.md](dreamzero/README.md) for the full architecture, validation details, and reproduction instructions.
 

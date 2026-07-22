@@ -127,7 +127,7 @@ kubectl delete job rlinf-maniskill-openvla -n rlinf
 | [ManiSkill+OpenVLA PPO](examples/maniskill-openvla-ppo/) | RLinf v0.2 | ManiSkill + OpenVLA PPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf v0.2 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf v0.2 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [DreamZero SFT](examples/dreamzero/) | RLinf v0.2 | DROID (Distributed Robot Interaction Dataset) + DreamZero 14B SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
+| [DreamZero SFT](examples/dreamzero/) | RLinf v0.2 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
 
 ---
 
