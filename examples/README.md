@@ -49,25 +49,19 @@ All PPO examples use the **same container image** (`BUILD_TARGET=embodied-manisk
 | [LIBERO + pi0 PPO](libero-pi0-ppo/) | LIBERO | PPO | pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
 | [DreamZero SFT](dreamzero/) | LIBERO | SFT | Wan2.1-14B | `dreamzero` | `libero_sft_dreamzero_14b` |
 
-### Future Examples (require different BUILD_TARGET)
-
-| Example | Simulator | Model | BUILD_TARGET |
-|---------|-----------|-------|-------------|
-| RoboTwin + LingBot-VLA PPO | RoboTwin | LingBot-VLA | `embodied-robotwin` |
-| CALVIN + pi0.5 PPO | CALVIN | pi0.5 | `embodied-calvin` |
-| Agentic RL (SearchR1) | N/A | Qwen2.5-VL | `reason` |
-
 ## Compute Requirements
 
 | Component | Requirement |
 |-----------|-------------|
-| **GPU** | 8x 80GB GPUs (Graphics Processing Units) per node (H100 recommended) |
+| **GPU** | 8x 80GB+ GPUs (Graphics Processing Units) per node |
 | **Multi-node** | 1-2 nodes (8-16 GPUs total) |
-| **VRAM per GPU** | 80GB (FSDP full-shard with CPU offload) |
-| **CPU** | 192 cores per node (for parallel env rendering) |
-| **Memory** | 1.8TB per node |
+| **VRAM per GPU** | 80GB+ (FSDP full-shard with CPU offload) |
+| **CPU** | High core count per node (for parallel env rendering) |
+| **Memory** | ~1.8TB per node |
 | **Network** | Low-latency, high-bandwidth for NCCL allreduce (EFA) |
-| **Storage** | Shared filesystem for checkpoints + model weights (FSx for Lustre) |
+| **Storage** | Shared filesystem for checkpoints + model weights (FSx for Lustre). Plan >=250GB free for the DreamZero 14B example (a 14B FSDP DCP checkpoint is ~140-206GB). |
+
+This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for the DreamZero example; other GPU instances with equivalent-or-greater per-GPU VRAM and EFA support are expected to work. Infrastructure/EFA/NCCL validation only was run on g6.8xlarge.
 
 ## Software Stack
 
@@ -126,17 +120,12 @@ examples/
 ├── README.md                           # This file
 ├── scripts/
 │   ├── run_training_eks.sh             # Generic training launcher (any config)
-│   ├── run_dreamzero_sft_eks.sh        # DreamZero multi-node SFT launcher (torchrun)
 │   ├── plot_training_curve.py          # TensorBoard events → training curve PNG
-│   ├── generate_video_predictions.py   # Offline inference: checkpoint → video + actions
-│   ├── compose_side_by_side.py         # 3×2 grid composition (GT vs prediction)
-│   ├── compose_with_actions.py         # Video + action trajectory dual-panel
-│   ├── fast_hf_download.py             # Fast parallel HF dataset downloader
 │   └── install_extras.sh              # Conditional package installer for EXTRAS
 ├── maniskill-openvla-ppo/              # ManiSkill + OpenVLA PPO
 ├── maniskill-openvlaoft-ppo/           # ManiSkill + OpenVLA-OFT PPO
 ├── libero-pi0-ppo/                     # LIBERO + pi0 PPO
-└── dreamzero/                          # DreamZero SFT (multi-node)
+└── dreamzero/                          # DreamZero SFT (multi-node; see dreamzero/README.md)
 ```
 
 ## Quick Start
@@ -188,26 +177,9 @@ DreamZero is a **World Action Model** -- a single 14B-parameter Diffusion Transf
 
 Trained on the DROID (Distributed Robot Interaction Dataset) dataset (real Franka Panda robot demonstrations from multiple labs), the model learns to predict both what will happen in the world (video) and what the robot should do (7-DOF (Degrees of Freedom) joint positions) — using video prediction as a computational scaffold for action reasoning.
 
-| Result | Value |
-|--------|-------|
-| Loss (0 → 1000 steps) | 0.60 → 0.0975 |
-| Throughput | 12.1 s/step (2 nodes, 16x H200) |
-| Training Time | 3.4 hours |
-| Cost | ~$660 |
-| Checkpoint Size | 282 GB |
+This example was validated end-to-end on EKS with a **1-step** SFT run, which exercises the full pipeline (build → stage → 2-node FSDP2 SFT over EFA → sharded DCP checkpoint → DCP→`.pt` conversion → LIBERO simulator eval + in-sim rollout video) rather than task accuracy. A 1-step checkpoint yields `eval/success_once = 0.0`, which is expected; real accuracy requires a multi-step run. No success numbers or loss curves are fabricated here.
 
-See [dreamzero/README.md](dreamzero/README.md) for full results, architecture, and reproduction instructions.
-
-## AWS Instance Recommendation
-
-| Scenario | Instance | Nodes | Total GPUs | Estimated Cost/hr |
-|----------|----------|-------|------------|-------------------|
-| **Infrastructure validation** | g6.8xlarge | 2 | 2 | ~$2 |
-| **Development / quickstart** | p4de.24xlarge | 1 | 8 | ~$41 |
-| **Production training (PPO)** | p5.48xlarge | 1-2 | 8-16 | ~$98-197 |
-| **DreamZero SFT (14B)** | p5en.48xlarge | 2 | 16 | ~$230 |
-
-g6.8xlarge is for EFA/NCCL/container validation only -- the single L4 GPU cannot fit a 7B VLA model.
+See [dreamzero/README.md](dreamzero/README.md) for the full architecture, validation details, and reproduction instructions.
 
 ## Validation
 
