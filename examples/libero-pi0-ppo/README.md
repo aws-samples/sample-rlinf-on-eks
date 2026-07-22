@@ -5,7 +5,7 @@
 
 Single-node RL (reinforcement learning) fine-tuning of [pi0](https://www.physicalintelligence.company/blog/pi0) (3B flow-matching VLA (Vision-Language-Action model)) on LIBERO (Lifelong Embodied Robot Operation) spatial manipulation tasks using Proximal Policy Optimization (PPO).
 
-> **Status**: Training complete. Peak success rate **81.6%** at step 189.
+> **Validated on EKS.** This deployment was run end-to-end on Amazon EKS; PPO fine-tuning converged to an **81.6% peak success rate**. Use it as a starting point for your own training runs (see [Results](#results) for the reference run).
 
 <video src="assets/libero_pi0_success.mp4" width="720" autoplay loop muted></video>
 

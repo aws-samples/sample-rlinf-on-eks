@@ -5,7 +5,7 @@
 
 Single-node RL (reinforcement learning) fine-tuning of [OpenVLA](https://openvla.github.io/) (7B VLA (Vision-Language-Action model)) on ManiSkill3 robotic manipulation tasks using Proximal Policy Optimization (PPO).
 
-> **Status**: Training complete. Peak success rate **96.0%** at step 137.
+> **Validated on EKS.** This deployment was run end-to-end on Amazon EKS; PPO fine-tuning converged to a **96.0% peak success rate**, matching the published RLinf benchmark. Use it as a starting point for your own training runs (see [Results](#results) for the reference run).
 
 <video src="assets/maniskill_openvla_success.mp4" width="720" autoplay loop muted></video>
 
