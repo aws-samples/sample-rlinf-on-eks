@@ -40,14 +40,14 @@ source switch_env openpi       # pi0
 
 ## Examples
 
-All PPO examples use the **same container image** (`BUILD_TARGET=embodied-maniskill_libero`). The only difference is the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables. DreamZero uses the same base image with `EXTRAS=dreamzero`.
+All PPO examples use the **same container image** (`BUILD_TARGET=embodied-maniskill_libero`). The only difference is the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables. DreamZero uses a **separate image** (`BUILD_TARGET=embodied-libero`) with its own `dreamzero` venv.
 
 | Example | Simulator | Algorithm | Model | Venv | Config |
 |---------|-----------|-----------|-------|------|--------|
 | [ManiSkill + OpenVLA PPO](maniskill-openvla-ppo/) | ManiSkill3 | PPO | OpenVLA 7B | `openvla` | `maniskill_ppo_openvla_quickstart` |
 | [ManiSkill + OpenVLA-OFT PPO](maniskill-openvlaoft-ppo/) | ManiSkill3 | PPO | OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
 | [LIBERO + pi0 PPO](libero-pi0-ppo/) | LIBERO | PPO | pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
-| [DreamZero SFT](dreamzero/) | DROID | SFT | Wan2.1-14B | `openvla` | N/A (OmegaConf) |
+| [DreamZero SFT](dreamzero/) | LIBERO | SFT | Wan2.1-14B | `dreamzero` | `libero_sft_dreamzero_14b` |
 
 ### Future Examples (require different BUILD_TARGET)
 
@@ -175,7 +175,7 @@ envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.
 # LIBERO + pi0 PPO
 envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 
-# DreamZero SFT (multi-node, requires EXTRAS=dreamzero image build)
+# DreamZero SFT (multi-node, requires BUILD_TARGET=embodied-libero image)
 envsubst < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
 # 7. Monitor
@@ -249,4 +249,4 @@ Uses `runner.max_steps=1` Hydra override to limit RLinf to exactly 1 PPO step. T
 | ManiSkill + OpenVLA | `openvla` | `maniskill_ppo_openvla_quickstart` |
 | ManiSkill + OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
 | LIBERO + pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
-| DreamZero SFT | `openvla` | N/A (uses OmegaConf overrides via torchrun) |
+| DreamZero SFT | `dreamzero` | `libero_sft_dreamzero_14b` |
