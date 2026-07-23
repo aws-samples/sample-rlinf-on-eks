@@ -75,7 +75,7 @@
         <mxCell id="pipe" parent="1" style="swimlane;startSize=30;html=1;fontStyle=1;verticalAlign=top;labelBackgroundColor=none;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="Pipeline (each stage = one manifest)" vertex="1">
           <mxGeometry height="463" width="390" x="970" y="70" as="geometry" />
         </mxCell>
-        <mxCell id="p1" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="1. Build + push image to ECR&#xa;embodied-libero + dreamzero venv" vertex="1">
+        <mxCell id="p1" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="1. Build + push image to ECR&#xa;unified image (embodied-maniskill_libero + dreamzero venv)" vertex="1">
           <mxGeometry height="50" width="330" x="30" y="45" as="geometry" />
         </mxCell>
         <mxCell id="p2" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="2. Stage + metadata&#xa;model-download.yaml + generate-metadata.yaml" vertex="1">

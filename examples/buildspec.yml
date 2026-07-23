@@ -16,7 +16,7 @@
 #   - ECR_REPO: ECR repository name (default: rlinf-on-eks/rlinf)
 #   - UPSTREAM_REPO: GitHub URL for the RLinf repository
 #   - UPSTREAM_REF: Git ref to checkout (tag, branch, or commit SHA)
-#   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-libero)
+#   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-maniskill_libero)
 #   - EXTRAS: Comma-separated list of extras to install (default: rlinf)
 #   - DREAMZERO_REPO: GitHub URL for the DreamZero (groot) package repo
 #   - DREAMZERO_REF: Git ref to checkout for DreamZero (tag, branch, or commit SHA)
@@ -27,8 +27,8 @@ env:
   variables:
     ECR_REPO: "rlinf-on-eks/rlinf"
     UPSTREAM_REPO: "https://github.com/RLinf/RLinf.git"
-    UPSTREAM_REF: "b3bbabb1f461"
-    BUILD_TARGET: "embodied-libero"
+    UPSTREAM_REF: "0505431899574619da86f551bad70b71e0ea2177"  # RLinf v0.3 tag
+    BUILD_TARGET: "embodied-maniskill_libero"
     EXTRAS: "rlinf"
     DREAMZERO_REPO: "https://github.com/RLinf/dreamzero.git"
     DREAMZERO_REF: "ab790c198fbc"

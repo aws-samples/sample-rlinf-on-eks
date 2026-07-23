@@ -108,8 +108,8 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 
 ### DreamZero LIBERO 14B (validated end-to-end on EKS, 2026-06)
 Full details + every gotcha in `examples/AGENTS.md`. Headlines:
-- **FSDP2 + KubeRay RayJob multi-node (NOT torchrun/DeepSpeed/StatefulSet)**. Build target `embodied-libero` + a dedicated `dreamzero` venv. `groot` is external via `DREAMZERO_PATH`.
-- **The `dreamzero` venv is built by the upstream `embodied-libero` target** (RLinf PR #1272, pinned); the EKS overlay no longer rebuilds it.
+- **FSDP2 + KubeRay RayJob multi-node (NOT torchrun/DeepSpeed/StatefulSet)**. Runs from the unified image (`BUILD_TARGET=embodied-maniskill_libero` + a `dreamzero`-venv overlay) with `VENV_NAME=dreamzero`. `groot` is external via `DREAMZERO_PATH`.
+- **The `dreamzero` venv is added by the EKS overlay** (`examples/Dockerfile`) onto the `embodied-maniskill_libero` base when absent, so one image serves all examples.
 - **Apply manifests with restricted envsubst** (`envsubst '${ECR_URI} ${NAMESPACE}'`) — the KubeRay operator handles Ray head election, but the RayJob entrypoint still embeds inline bash that unrestricted envsubst would clobber.
 - **Hydra `+` prefix** for keys absent from the config struct (`metadata_json_path`, `save_full_model_weights`).
 - **Generate `libero_sim` metadata** (DROID checkpoint bundles only `oxe_droid`) and override `num_action_per_block=16` (DROID default 24 breaks the LIBERO forward pass).

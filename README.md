@@ -13,7 +13,7 @@ RLinf-on-EKS is a skills-based framework that provides working, prescriptive dep
 
 ## About RLinf
 
-[RLinf](https://github.com/RLinf/RLinf) (v0.2, 3k+ GitHub stars) is a flexible and scalable open-source RL infrastructure for Embodied and Agentic AI. Key capabilities:
+[RLinf](https://github.com/RLinf/RLinf) (v0.3, 3k+ GitHub stars) is a flexible and scalable open-source RL infrastructure for Embodied and Agentic AI. Key capabilities:
 
 - **RL Algorithms**: GRPO (Group Relative Policy Optimization), PPO, DAPO, SAC (Soft Actor-Critic), CrossQ, RLPD, SAC-Flow, DSRL, DAgger
 - **Simulators**: ManiSkill, LIBERO, RoboTwin, CALVIN, RoboCasa, IsaacLab, MetaWorld, BEHAVIOR
@@ -124,10 +124,10 @@ kubectl delete job rlinf-maniskill-openvla -n rlinf
 
 | Example | Framework | Target | GPU Requirement | Status |
 |---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA PPO](examples/maniskill-openvla-ppo/) | RLinf v0.2 | ManiSkill + OpenVLA PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf v0.2 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf v0.2 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [DreamZero SFT](examples/dreamzero/) | RLinf v0.2 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
+| [ManiSkill+OpenVLA PPO](examples/maniskill-openvla-ppo/) | RLinf v0.3 | ManiSkill + OpenVLA PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf v0.3 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf v0.3 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [DreamZero SFT](examples/dreamzero/) | RLinf v0.3 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
 
 ---
 

@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-RLinf v0.2 -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
+RLinf v0.3 -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
 
 **Paper**: [RLinf System](https://arxiv.org/abs/2509.15965) | [RLinf-VLA](https://arxiv.org/abs/2510.06710) | **Code**: [github.com/RLinf/RLinf](https://github.com/RLinf/RLinf) | **Docs**: [rlinf.readthedocs.io](https://rlinf.readthedocs.io/en/latest/)
 
@@ -33,7 +33,7 @@ Load these via the `skill` tool for RLinf-specific procedural workflows:
 
 ## Examples
 
-The three PPO examples share one container image (`BUILD_TARGET=embodied-maniskill_libero`), differing only by env vars. **DreamZero is a SEPARATE image** (`BUILD_TARGET=embodied-libero` + a dedicated `dreamzero` venv) — see the DreamZero section below.
+All four examples run from ONE unified container image (`BUILD_TARGET=embodied-maniskill_libero` + a `dreamzero`-venv overlay in `examples/Dockerfile`), differing only by env vars (`CONFIG_NAME`/`VENV_NAME`/`MODEL_PATH`). The base target ships the PPO venvs (`openvla`/`openvla-oft`/`openpi`/gr00t/...) + ManiSkill & openpi assets; the overlay adds the `dreamzero` venv (DreamZero's `groot` is external via `DREAMZERO_PATH`). venvs are isolated `uv` envs, so one image serves all examples — see the DreamZero section below.
 
 | Example | `CONFIG_NAME` | `VENV_NAME` | `MODEL_PATH` |
 |---------|---------------|-------------|--------------|
@@ -66,7 +66,7 @@ then eval in the LIBERO simulator.** It is FSDP2 + KubeRay RayJob multi-node (NO
 old DROID/torchrun/DeepSpeed/StatefulSet design). Full pipeline: build → stage → SFT (2x p5en) →
 DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
 
-- **Build target is `embodied-libero`; the `dreamzero` venv is built by upstream** (RLinf PR #1272, pinned `b3bbabb1f461`) — the EKS overlay no longer rebuilds it. `VENV_NAME=dreamzero`. The `groot` package is still external (`github.com/RLinf/dreamzero.git`, pinned `ab790c198fbc`), provided via `DREAMZERO_PATH=/workspace/DreamZero` on PYTHONPATH; the buildspec clones it.
+- **Unified image: `BUILD_TARGET=embodied-maniskill_libero` + `dreamzero`-venv overlay.** The base target ships openvla/openvla-oft/openpi/gr00t/... venvs + ManiSkill/openpi assets; `examples/Dockerfile` adds the `dreamzero` venv when the base lacks it (RLinf's `install.sh --venv dreamzero --model dreamzero --env libero`, run from `${UV_PATH}`). `VENV_NAME=dreamzero`. Pins in `examples/buildspec.yml`: `UPSTREAM_REF=0505431899574619da86f551bad70b71e0ea2177` (v0.3), `DREAMZERO_REF=ab790c198fbc`. The `groot` package is external (`github.com/RLinf/dreamzero.git`), on PYTHONPATH via `DREAMZERO_PATH=/workspace/DreamZero`; the buildspec clones it.
 - **`groot` package is external** (`github.com/RLinf/dreamzero.git`), provided via
   `DREAMZERO_PATH=/workspace/DreamZero` on PYTHONPATH. The integration glue
   (`rlinf/models/embodiment/dreamzero/`, world-model env) is in-tree. Buildspec clones it.

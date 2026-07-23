@@ -83,7 +83,7 @@ export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repositor
 
 ### 1. Build the container
 
-DreamZero runs in the **`dreamzero` venv**, which the upstream `embodied-libero` build target now builds natively (RLinf PR #1272) — the EKS overlay no longer rebuilds it. The external `groot` package is cloned from `github.com/RLinf/dreamzero.git` by the buildspec and placed on `PYTHONPATH` via `DREAMZERO_PATH`. Both external repos are pinned to commits in `examples/buildspec.yml` (`UPSTREAM_REF=b3bbabb1f461`, `DREAMZERO_REF=ab790c198fbc`); `BUILD_TARGET=embodied-libero` is the buildspec default.
+DreamZero runs in the **`dreamzero` venv**. The image is built once from `BUILD_TARGET=embodied-maniskill_libero` (which ships the PPO venvs + ManiSkill/openpi assets); `examples/Dockerfile` then adds the `dreamzero` venv as an overlay (installed via RLinf's `install.sh` when the base target lacks it), so a single `:latest` image serves every example. The external `groot` package is cloned from `github.com/RLinf/dreamzero.git` by the buildspec and placed on `PYTHONPATH` via `DREAMZERO_PATH`. Both external repos are pinned in `examples/buildspec.yml` (`UPSTREAM_REF=0505431899574619da86f551bad70b71e0ea2177` (RLinf v0.3), `DREAMZERO_REF=ab790c198fbc`).
 
 ```bash
 zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
@@ -184,7 +184,7 @@ A checkpoint from a short training run produces rollouts where the robot drifts 
 
 The authoritative, full list lives in [`examples/AGENTS.md`](../AGENTS.md) (DreamZero section). The ones you are most likely to hit:
 
-- **`dreamzero` venv built by upstream.** `VENV_NAME=dreamzero`; the `embodied-libero` target builds it natively (RLinf PR #1272, pinned `b3bbabb1f461`). It must be its own venv — layering `dreamzero.txt` onto another env hits an unsatisfiable `lerobot 0.3.3` vs `torchcodec 0.2` resolve.
+- **`dreamzero` venv (unified image overlay).** `VENV_NAME=dreamzero`; `examples/Dockerfile` installs it onto the `embodied-maniskill_libero` base when absent. It must be its own venv — layering `dreamzero.txt` onto another env hits an unsatisfiable `lerobot 0.3.3` vs `torchcodec 0.2` resolve (isolated venvs avoid this).
 - **Restricted `envsubst` everywhere.** Always `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` and other manifests still embed inline shell that unrestricted substitution would clobber. **This requires [a8m/envsubst](https://github.com/a8m/envsubst), not GNU gettext's `envsubst`** — the GNU binary ignores the allow-list argument and substitutes *every* `${...}`, mangling the inline shell. Verify with `envsubst --version` (expect `envsubst version: vX.Y.Z`, not `envsubst (GNU gettext-runtime)`).
 - **Generate `libero_sim` metadata** (stage 2) before SFT/eval — the DROID checkpoint only ships `oxe_droid` stats.
 - **`num_action_per_block=16`** must override the inherited DROID default of 24 (temporal-alignment assertion). The launcher and eval config both set this.
@@ -219,7 +219,7 @@ To run longer than the default: raise `runner.max_steps` (and set a checkpoint `
 
 | Component | Version |
 |-----------|---------|
-| RLinf (upstream) | `b3bbabb1f461` |
+| RLinf (upstream) | `0505431899574619da86f551bad70b71e0ea2177` (v0.3) |
 | DreamZero / `groot` | `ab790c198fbc` |
 | EFA installer | 1.47.0 |
 | libfabric | 2.4.0 |

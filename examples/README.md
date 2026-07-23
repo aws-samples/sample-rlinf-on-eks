@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-> **Framework**: RLinf v0.2 -- Reinforcement Learning (RL) Infrastructure for Embodied and Agentic AI
+> **Framework**: RLinf v0.3 -- Reinforcement Learning (RL) Infrastructure for Embodied and Agentic AI
 > **Paper**: Yu et al., "RLinf: Flexible and Efficient Large-scale RL via Macro-to-Micro Flow Transformation", arXiv:2509.15965, 2025
 > **Code**: https://github.com/RLinf/RLinf
 > **Docs**: https://rlinf.readthedocs.io/en/latest/
@@ -40,7 +40,7 @@ source switch_env openpi       # pi0
 
 ## Examples
 
-All PPO examples use the **same container image** (`BUILD_TARGET=embodied-maniskill_libero`). The only difference is the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables. DreamZero uses a **separate image** (`BUILD_TARGET=embodied-libero`) with its own `dreamzero` venv.
+All examples run from the **same unified container image** (`BUILD_TARGET=embodied-maniskill_libero` plus a `dreamzero`-venv overlay, built once and pushed to `:latest`). Examples differ only by the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables — the PPO examples activate `openvla`/`openvla-oft`/`openpi`, DreamZero activates `dreamzero`. venvs are isolated, so one image serves every example.
 
 | Example | Simulator | Algorithm | Model | Venv | Config |
 |---------|-----------|-----------|-------|------|--------|
@@ -164,7 +164,7 @@ envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.
 # LIBERO + pi0 PPO
 envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 
-# DreamZero SFT (multi-node, requires BUILD_TARGET=embodied-libero image)
+# DreamZero SFT (multi-node; runs from the unified image, VENV_NAME=dreamzero)
 envsubst < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
 # 7. Monitor

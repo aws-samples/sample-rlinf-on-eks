@@ -190,8 +190,8 @@ COPY examples/scripts/ /workspace/eks/scripts/
 #
 # DreamZero note: the DreamZero `groot` package is provided by the
 # COPY DreamZero/ tree on PYTHONPATH (DREAMZERO_PATH). Its `dreamzero` venv is
-# built by the upstream embodied-libero target (RLinf PR #1272), so this overlay
-# no longer rebuilds it.
+# installed by the overlay below when the base BUILD_TARGET does not already
+# ship it (see the "Unified image" RUN), so a single image serves every example.
 #
 # Examples:
 #   --build-arg EXTRAS=rlinf                  (ManiSkill, LIBERO, pi0, DreamZero)
@@ -221,6 +221,26 @@ RUN cd /workspace/RLinf && \
         echo "Applying patch: ${p}"; \
         git apply --verbose "${p}" || patch -p1 < "${p}"; \
     done
+
+# Unified image: ensure the `dreamzero` venv is present regardless of BUILD_TARGET.
+#
+# We build ONE image serving all examples. The `embodied-maniskill_libero` base
+# ships the PPO venvs (openvla, openvla-oft, openpi, gr00t, ...) plus ManiSkill
+# and openpi assets, but NOT the `dreamzero` venv; the `embodied-libero` base
+# ships `dreamzero` but not openpi/ManiSkill. To serve DreamZero *and* the PPO
+# examples from a single :latest tag, we install the `dreamzero` venv here if the
+# base target did not already provide it. venvs are isolated `uv` environments
+# (${UV_PATH}/<name>), so adding one never perturbs the others -- this is the
+# same multi-venv pattern upstream uses, not a same-venv dependency layering
+# (which is what hits the lerobot/torchcodec resolve conflict).
+RUN if [ ! -d "${UV_PATH}/dreamzero" ]; then \
+        echo "Installing dreamzero venv overlay (base target lacked it)..."; \
+        cd "${UV_PATH}" && \
+        bash requirements/install.sh --platform "${RLINF_PLATFORM}" embodied \
+            --venv dreamzero --model dreamzero --env libero; \
+    else \
+        echo "dreamzero venv already present in base image; skipping overlay."; \
+    fi
 
 # Install extras based on EXTRAS arg
 RUN chmod +x /workspace/eks/scripts/install_extras.sh && \
@@ -259,6 +279,11 @@ RUN apt-get update -y && \
 
 # Upgrade build/packaging utilities (and their setuptools-vendored copies) that
 # carry fixable HIGH CVEs (jaraco.context CVE-2026-23949, wheel CVE-2026-24049).
+# setuptools is capped `<81`: 81 removed the bundled `pkg_resources`, which
+# `sapien` (ManiSkill's physics backend) imports at load time -- an unbounded
+# upgrade pulls setuptools 83 and breaks `import mani_skill` with
+# `ModuleNotFoundError: No module named 'pkg_resources'`. `>=78.1.1` still
+# satisfies the CVE fix while `<81` keeps pkg_resources available.
 # These are used only at package-build time. Run across every model venv.
 # A final cache purge runs LAST here: pip/uv re-create /opt/venv/.cache during the
 # upgrade above (after the hardening block's purge), and that regenerated cache
@@ -270,7 +295,7 @@ RUN for v in /opt/venv/*/bin/activate; do \
         venv_dir="$(dirname "$(dirname "$v")")"; \
         echo "Upgrading packaging tools in ${venv_dir}"; \
         set +u; . "$v"; set -u; \
-        pip install --no-cache-dir --upgrade 'setuptools>=78.1.1' 'wheel>=0.46.2' 2>/dev/null || \
+        pip install --no-cache-dir --upgrade 'setuptools>=78.1.1,<81' 'wheel>=0.46.2' 2>/dev/null || \
             echo "  WARNING: tooling upgrade skipped in ${venv_dir}"; \
         deactivate 2>/dev/null || true; \
     done && \
