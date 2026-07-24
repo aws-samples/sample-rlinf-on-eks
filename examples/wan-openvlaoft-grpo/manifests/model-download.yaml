@@ -1,0 +1,53 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Stage the Wan world-model checkpoint + OpenVLA-OFT SFT policy to FSx for the
+# wan-openvlaoft-grpo example. Render with: envsubst '${NAMESPACE}' | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-wan-openvlaoft
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          env:
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+                  optional: true
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+              pip install -q huggingface_hub
+              python3 - <<'PY'
+              import os
+              from huggingface_hub import snapshot_download
+              jobs = [
+                  ("RLinf/RLinf-Wan-LIBERO-Spatial", "/fsx/models/RLinf-Wan-LIBERO-Spatial"),
+                  ("Haozhan72/Openvla-oft-SFT-libero-spatial-traj1", "/fsx/models/Openvla-oft-SFT-libero-spatial-traj1"),
+              ]
+              for repo_id, local_dir in jobs:
+                  print(f"=== Downloading {repo_id} -> {local_dir} ===", flush=True)
+                  snapshot_download(repo_id=repo_id, local_dir=local_dir,
+                                    token=os.environ.get("HF_TOKEN"))
+              PY
+              echo "=== Staged Wan + OpenVLA-OFT artifacts ==="
+              du -sh /fsx/models/RLinf-Wan-LIBERO-Spatial 2>/dev/null || echo "  (wan missing)"
+              du -sh /fsx/models/Openvla-oft-SFT-libero-spatial-traj1 2>/dev/null || echo "  (policy missing)"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

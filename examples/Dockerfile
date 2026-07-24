@@ -242,6 +242,25 @@ RUN if [ ! -d "${UV_PATH}/dreamzero" ]; then \
         echo "dreamzero venv already present in base image; skipping overlay."; \
     fi
 
+# Wan world-model example deps overlay.
+# The wan-openvlaoft-grpo example runs in the `openvla-oft` venv (switch_env
+# openvla-oft) but needs deps the base openvla-oft venv lacks. Upstream's
+# install_wan_world_model() does two things: (1) editable-install the Wan
+# diffusion library `diffsynth` from github.com/RLinf/diffsynth-studio (the
+# Wan env imports `diffsynth` at load), then (2) install
+# requirements/embodied/models/wan.txt. venvs are isolated, so we add both to
+# the openvla-oft venv only. Idempotent.
+RUN if [ -d "${UV_PATH}/openvla-oft" ]; then \
+        echo "Installing Wan world-model deps into openvla-oft venv..."; \
+        git clone --depth 1 https://github.com/RLinf/diffsynth-studio.git /opt/diffsynth-studio && \
+        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir -e /opt/diffsynth-studio && \
+        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir \
+            safetensors sentencepiece protobuf modelscope ftfy pandas \
+            'deepspeed==0.18.4' seaborn; \
+    else \
+        echo "openvla-oft venv absent; skipping Wan deps overlay."; \
+    fi
+
 # Install extras based on EXTRAS arg
 RUN chmod +x /workspace/eks/scripts/install_extras.sh && \
     /workspace/eks/scripts/install_extras.sh "${EXTRAS}"
@@ -257,7 +276,11 @@ RUN chmod +x /workspace/eks/scripts/install_extras.sh && \
 #    upstream Dockerfiles from transitive dependencies).
 # 3. Remove bundled Dockerfiles shipped inside installed dependency source trees
 #    (gr00t, dexbotic, RLinf, nsight). They are upstream artifacts, never built
-#    here, and only trigger IaC-misconfig findings.
+#    here, and only trigger IaC-misconfig findings. NOTE: matched case-sensitively
+#    (`-name`, not `-iname`) and with site-packages/dist-packages EXCLUDED, so we
+#    never delete Python modules literally named `dockerfile.py` (e.g.
+#    wandb/sdk/launch/builder/templates/dockerfile.py) -- a case-insensitive match
+#    previously corrupted wandb and crashed EnvWorker init in the venvs.
 #
 # Trivy evidence: this removes the fixable CRITICAL (gRPC in wandb-core),
 # ~36 cache vulnerabilities, and all 55 HIGH Dockerfile misconfigurations.
@@ -273,7 +296,8 @@ RUN apt-get update -y && \
     rm -rf /opt/venv/.cache /root/.cache /root/.cargo/registry /tmp/* && \
     find /opt/venv -path '*/.cache' -type d -prune -exec rm -rf {} + 2>/dev/null || true && \
     find /opt /workspace /usr -type f \
-        \( -iname 'Dockerfile' -o -iname 'Dockerfile.*' -o -iname '*.Dockerfile' \) \
+        -not -path '*/site-packages/*' -not -path '*/dist-packages/*' \
+        \( -name 'Dockerfile' -o -name 'Dockerfile.*' -o -name '*.Dockerfile' \) \
         -delete 2>/dev/null || true && \
     ldconfig
 

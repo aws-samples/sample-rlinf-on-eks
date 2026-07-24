@@ -13,7 +13,6 @@
 #   ./examples/scripts/generate-showcase-video.sh <example-name>
 #
 # Examples:
-#   ./examples/scripts/generate-showcase-video.sh maniskill-openvla-ppo
 #   ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
 #   ./examples/scripts/generate-showcase-video.sh libero-pi0-ppo
 #

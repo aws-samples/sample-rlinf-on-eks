@@ -320,7 +320,7 @@ The repo includes `validate.sh`, a full validation harness that runs all levels:
 ./validate.sh --mode cluster --skip-to 2  # Start from container test
 
 # Test a specific example in L5
-./validate.sh --mode cluster --level 5 --example maniskill-openvla  # Replace with your example name
+./validate.sh --mode cluster --level 5 --example maniskill-openvlaoft  # Replace with your example name
 
 # Continue past failures
 ./validate.sh --mode cluster --continue-on-error

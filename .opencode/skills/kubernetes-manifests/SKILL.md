@@ -121,7 +121,7 @@ spec:
             - name: MODEL_PATH
               value: "/fsx/models/openvla-7b"  # Replace with your model path
             - name: EXPERIMENT_NAME
-              value: "maniskill-openvla-ppo"  # Replace with your experiment name
+              value: "maniskill-openvlaoft-ppo"  # Replace with your experiment name
             - name: NVIDIA_DRIVER_CAPABILITIES
               value: "all"
             - name: NCCL_DEBUG
@@ -308,7 +308,7 @@ spec:
             - name: MODEL_PATH
               value: "/fsx/models/openvla-7b"  # Replace with your model path
             - name: EXPERIMENT_NAME
-              value: "maniskill-openvla-ppo"  # Replace with your experiment name
+              value: "maniskill-openvlaoft-ppo"  # Replace with your experiment name
             - name: MLFLOW_TRACKING_URI  # Optional: only if MLflow addon is enabled
               value: "http://mlflow.rlinf.svc.cluster.local"
             - name: NVIDIA_DRIVER_CAPABILITIES

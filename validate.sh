@@ -13,7 +13,7 @@
 # Usage:
 #   ./validate.sh --mode local
 #   ./validate.sh --mode cluster --level 3
-#   ./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvla
+#   ./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvlaoft
 #   ./validate.sh --mode cluster --continue-on-error
 #
 # Levels (cluster mode):
@@ -63,7 +63,7 @@ Modes:
 Options:
   --level N            Run up to level N (default: 6, cluster mode only)
   --skip-to N          Start from level N (skip earlier levels)
-  --example NAME       Test a specific example in L5 (maniskill-openvla, maniskill-openvlaoft, libero-pi0)
+  --example NAME       Test a specific example in L5 (maniskill-openvlaoft, libero-pi0)
   --continue-on-error  Don't stop on first failure
   -h, --help           Show this help
 

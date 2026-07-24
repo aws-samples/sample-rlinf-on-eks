@@ -25,7 +25,7 @@ Prescriptive deployment of the [RLinf](https://github.com/RLinf/RLinf) RL framew
 
 # Cluster validation -- levels L0 (infra smoke) through L6 (multi-node training)
 ./validate.sh --mode cluster --level 3          # run L0-L3
-./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvla
+./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvlaoft
 ./validate.sh --mode cluster --continue-on-error
 
 # Infrastructure deploy (layered -- applies all 5 layers in order)

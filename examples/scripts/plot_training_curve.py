@@ -19,10 +19,10 @@ Usage:
 
     # Multiple event files (merged and deduplicated):
     python examples/scripts/plot_training_curve.py \
-        --logdir /fsx/checkpoints/maniskill-openvla-ppo/maniskill_ppo_openvla/tensorboard \
+        --logdir /fsx/checkpoints/maniskill-openvlaoft-ppo/maniskill_ppo_openvlaoft/tensorboard \
         --metric success_once \
-        --output examples/maniskill-openvla-ppo/assets/training_curve.png \
-        --title "ManiSkill + OpenVLA PPO — Training Progress"
+        --output examples/maniskill-openvlaoft-ppo/assets/training_curve.png \
+        --title "ManiSkill + OpenVLA-OFT PPO — Training Progress"
 
     # Custom smoothing window and threshold line:
     python examples/scripts/plot_training_curve.py \

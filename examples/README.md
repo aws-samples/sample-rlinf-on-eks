@@ -44,8 +44,8 @@ All examples run from the **same unified container image** (`BUILD_TARGET=embodi
 
 | Example | Simulator | Algorithm | Model | Venv | Config |
 |---------|-----------|-----------|-------|------|--------|
-| [ManiSkill + OpenVLA PPO](maniskill-openvla-ppo/) | ManiSkill3 | PPO | OpenVLA 7B | `openvla` | `maniskill_ppo_openvla_quickstart` |
 | [ManiSkill + OpenVLA-OFT PPO](maniskill-openvlaoft-ppo/) | ManiSkill3 | PPO | OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
+| [Wan World Model GRPO](wan-openvlaoft-grpo/) | Wan (LIBERO-Spatial) | GRPO | OpenVLA-OFT | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` |
 | [LIBERO + pi0 PPO](libero-pi0-ppo/) | LIBERO | PPO | pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
 | [DreamZero SFT](dreamzero/) | LIBERO | SFT | Wan2.1-14B | `dreamzero` | `libero_sft_dreamzero_14b` |
 
@@ -122,8 +122,8 @@ examples/
 │   ├── run_training_eks.sh             # Generic training launcher (any config)
 │   ├── plot_training_curve.py          # TensorBoard events → training curve PNG
 │   └── install_extras.sh              # Conditional package installer for EXTRAS
-├── maniskill-openvla-ppo/              # ManiSkill + OpenVLA PPO
 ├── maniskill-openvlaoft-ppo/           # ManiSkill + OpenVLA-OFT PPO
+├── wan-openvlaoft-grpo/                # Wan World Model GRPO (OpenVLA-OFT)
 ├── libero-pi0-ppo/                     # LIBERO + pi0 PPO
 └── dreamzero/                          # DreamZero SFT (multi-node; see dreamzero/README.md)
 ```
@@ -145,7 +145,6 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 # 4. Stage model weights (per-example -- pick one or run all)
 #    Use restricted envsubst to avoid expanding shell vars in download scripts
-envsubst '${NAMESPACE}' < examples/maniskill-openvla-ppo/manifests/model-download.yaml | kubectl apply -f -
 envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
 envsubst '${NAMESPACE}' < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
 
@@ -155,9 +154,6 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test
 
 # 6. Launch training (pick an example)
-# ManiSkill + OpenVLA PPO
-envsubst < examples/maniskill-openvla-ppo/manifests/maniskill-openvla-ppo.yaml | kubectl apply -f -
-
 # ManiSkill + OpenVLA-OFT PPO
 envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
@@ -168,7 +164,7 @@ envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply
 envsubst < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
 # 7. Monitor
-kubectl logs -f job/rlinf-maniskill-openvla    # or whichever example
+kubectl logs -f job/rlinf-maniskill-openvlaoft    # or whichever example
 ```
 
 ## DreamZero: World Action Model (WAM)
@@ -196,7 +192,7 @@ The repo includes a layered validation harness that tests the full stack from st
 
 # Advanced
 ./validate.sh --mode cluster --skip-to 2  # Resume from L2
-./validate.sh --mode cluster --level 5 --example maniskill-openvla  # Single example
+./validate.sh --mode cluster --level 5 --example maniskill-openvlaoft  # Single example
 ./validate.sh --mode cluster --continue-on-error  # Don't stop on failure
 ```
 
@@ -218,7 +214,7 @@ Uses `runner.max_steps=1` Hydra override to limit RLinf to exactly 1 PPO step. T
 
 | Example | Venv | Config |
 |---------|------|--------|
-| ManiSkill + OpenVLA | `openvla` | `maniskill_ppo_openvla_quickstart` |
 | ManiSkill + OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
+| Wan World Model GRPO | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` |
 | LIBERO + pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
 | DreamZero SFT | `dreamzero` | `libero_sft_dreamzero_14b` |

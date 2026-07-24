@@ -120,13 +120,13 @@ spec:
           env:
             # --- Experiment selection ---
             - name: CONFIG_NAME
-              value: "maniskill_ppo_openvla_quickstart"
+              value: "maniskill_ppo_openvlaoft_quickstart"
             - name: VENV_NAME
-              value: "openvla"
+              value: "openvla-oft"
             - name: MODEL_PATH
-              value: "/fsx/models/openvla-7b-rlvla-warmup"
+              value: "/fsx/models/openvla-oft-sft-libero10"
             - name: EXPERIMENT_NAME
-              value: "maniskill-ppo-openvla-multi"
+              value: "maniskill-ppo-openvlaoft-multi"
             # --- Cluster config ---
             - name: POD_NAMESPACE
               valueFrom:

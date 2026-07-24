@@ -46,7 +46,7 @@ Training runs on two p5en.48xlarge nodes (16x H200 GPUs total) provisioned by Ka
 
 ## Quick Start: Deploy RLinf ManiSkill PPO
 
-Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Policy Optimization) example ([PPO training of OpenVLA on ManiSkill3](examples/maniskill-openvla-ppo/README.md)) in 6 steps.
+Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Policy Optimization) example ([PPO training of OpenVLA-OFT on ManiSkill3](examples/maniskill-openvlaoft-ppo/README.md)) in 6 steps.
 
 ### Prerequisites
 
@@ -97,8 +97,8 @@ aws codebuild batch-get-builds --ids "$BUILD_ID" --query 'builds[0].buildStatus'
 
 # 4. Stage model weights (per-example)
 export NAMESPACE=rlinf
-envsubst '${NAMESPACE}' < examples/maniskill-openvla-ppo/manifests/model-download.yaml | kubectl apply -f -
-kubectl logs -f job/model-download-maniskill-openvla -n $NAMESPACE
+envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
+kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 
 # 5. Validate container
 export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
@@ -106,14 +106,14 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test -n rlinf
 
 # 6. Launch training
-envsubst < examples/maniskill-openvla-ppo/manifests/maniskill-openvla-ppo.yaml | kubectl apply -f -
-kubectl logs -f job/rlinf-maniskill-openvla -n rlinf
+envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+kubectl logs -f job/rlinf-maniskill-openvlaoft -n rlinf
 ```
 ### Teardown
 
 ```bash
 # Delete training job
-kubectl delete job rlinf-maniskill-openvla -n rlinf
+kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 
 # Full teardown (destroys everything in reverse layer order)
 ./infrastructure/deploy.sh --action destroy --layer all
@@ -124,8 +124,8 @@ kubectl delete job rlinf-maniskill-openvla -n rlinf
 
 | Example | Framework | Target | GPU Requirement | Status |
 |---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA PPO](examples/maniskill-openvla-ppo/) | RLinf v0.3 | ManiSkill + OpenVLA PPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf v0.3 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf v0.3 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf v0.3 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [DreamZero SFT](examples/dreamzero/) | RLinf v0.3 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
 

@@ -9,7 +9,7 @@
 #
 # Prerequisites:
 #   - FSx for Lustre PVC (fsx-claim) available in the rlinf namespace
-#   - ManiSkill assets already staged (from maniskill-openvla-ppo example or manually)
+#   - ManiSkill assets already staged (this job stages them, or stage manually)
 #
 # Usage:
 #   export NAMESPACE=rlinf  # or your namespace

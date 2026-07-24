@@ -1,40 +1,17 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-# ManiSkill + OpenVLA PPO
 #
-# The canonical first example. Trains OpenVLA on ManiSkill3 robotic
-# manipulation using PPO. Full 8-GPU config: actor on 0-7, env on 0-3,
-# rollout on 4-7.
-#
-# Image: embodied-maniskill_libero (BUILD_TARGET in buildspec.yml)
-# Venv:  openvla
-# Config: maniskill_ppo_openvla
-#
-# Prerequisites:
-#   - model-download.yaml completed (downloads openvla-7b-rlvla-warmup)
-#
-# Usage:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
-#   envsubst < examples/maniskill-openvla-ppo.yaml | kubectl apply -f -
+# Wan World Model GRPO: RL fine-tune OpenVLA-OFT on LIBERO-Spatial where the
+# environment is the Wan action-conditioned video world model (no physics sim).
+# Render with: envsubst '${ECR_URI} ${NAMESPACE}' | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: rlinf-maniskill-openvla
+  name: rlinf-wan-openvlaoft-grpo
   namespace: ${NAMESPACE}
-  labels:
-    app: rlinf
-    reference: rlinf
-    example: maniskill-openvla-ppo
 spec:
   backoffLimit: 0
   template:
-    metadata:
-      labels:
-        app: rlinf
-        example: maniskill-openvla-ppo
-      annotations:
-        karpenter.sh/do-not-disrupt: "true"
     spec:
       restartPolicy: Never
       serviceAccountName: training-sa
@@ -47,22 +24,27 @@ spec:
       containers:
         - name: training
           image: ${ECR_URI}:latest
+          imagePullPolicy: Always
           command: ["bash", "/workspace/eks/scripts/run_training_eks.sh"]
           env:
             - name: CONFIG_NAME
-              value: "maniskill_ppo_openvla"
+              value: "wan_libero_spatial_grpo_openvlaoft"
             - name: VENV_NAME
-              value: "openvla"
+              value: "openvla-oft"
             - name: MODEL_PATH
-              value: "/fsx/models/openvla-7b-rlvla-warmup"
+              value: "/fsx/models/Openvla-oft-SFT-libero-spatial-traj1"
+            # env.train.enable_offload=False: the Wan world-model env's offload
+            # method isn't detected through the env-wrapper stack, so the upstream
+            # default (enable_offload=True) trips an assertion at env init. Disabling
+            # env offload runs fine on p5en H200 (141GB); revisit for smaller GPUs.
+            - name: HYDRA_OVERRIDES
+              value: "env.train.wan_wm_hf_ckpt_path=/fsx/models/RLinf-Wan-LIBERO-Spatial env.train.enable_offload=False"
             - name: NUM_GPUS
               value: "8"
             - name: NUM_NODES
               value: "1"
             - name: CKPT_PATH
               value: "/fsx/checkpoints"
-            - name: MANISKILL_ASSET_DIR
-              value: "/fsx/assets/maniskill"
             - name: NCCL_DEBUG
               value: "WARN"
             - name: NVIDIA_DRIVER_CAPABILITIES

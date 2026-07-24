@@ -27,7 +27,6 @@ The model download jobs (`examples/<example>/manifests/model-download.yaml`) dow
 
 | Model | FSx Path | Size |
 |-------|----------|------|
-| `gen-robot/openvla-7b-rlvla-warmup` | `/fsx/models/openvla-7b-rlvla-warmup` | ~14 GB |
 | `RLinf/Openvla-oft-SFT-libero10-trajall` | `/fsx/models/openvla-oft-sft-libero10` | ~14 GB |
 | `RLinf/RLinf-Pi0-SFT-Spatial-Object-Goal` | `/fsx/models/rlinf-pi0-sft-spatial` | ~14 GB |
 
@@ -41,14 +40,13 @@ Defined in `tests/lib/cluster.sh` L5_EXAMPLE_LIST:
 
 | Example Name | `VENV_NAME` | `CONFIG_NAME` | `MODEL_PATH` |
 |-------------|-------------|---------------|--------------|
-| `maniskill-openvla` | `openvla` | `maniskill_ppo_openvla_quickstart` | `/fsx/models/openvla-7b-rlvla-warmup` |
 | `maniskill-openvlaoft` | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` | `/fsx/models/openvla-oft-sft-libero10` |
 | `libero-pi0` | `openpi` | `libero_spatial_ppo_openpi_quickstart` | `/fsx/models/rlinf-pi0-sft-spatial` |
 
 ### Running a Specific Example
 
 ```bash
-./validate.sh --mode cluster --level 5 --skip-to 5 --example maniskill-openvla
+./validate.sh --mode cluster --level 5 --skip-to 5 --example maniskill-openvlaoft
 ```
 
 ### Expected Success Indicators

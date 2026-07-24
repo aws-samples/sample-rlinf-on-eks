@@ -7,14 +7,14 @@
 # Parameterized via environment variables (set by the test harness).
 #
 # Parameters (set via envsubst):
-#   EXAMPLE_NAME  - e.g., maniskill-openvla
-#   VENV_NAME     - e.g., openvla, openvla-oft, openpi
-#   CONFIG_NAME   - e.g., maniskill_ppo_openvla_quickstart
-#   MODEL_PATH    - e.g., /fsx/models/openvla-7b-rlvla-warmup
+#   EXAMPLE_NAME  - e.g., maniskill-openvlaoft
+#   VENV_NAME     - e.g., openvla-oft, openpi
+#   CONFIG_NAME   - e.g., maniskill_ppo_openvlaoft_quickstart
+#   MODEL_PATH    - e.g., /fsx/models/openvla-oft-sft-libero10
 #   ECR_URI       - ECR image URI
 #
 # Usage:
-#   export EXAMPLE_NAME=maniskill-openvla VENV_NAME=openvla ...
+#   export EXAMPLE_NAME=maniskill-openvlaoft VENV_NAME=openvla-oft ...
 #   envsubst < tests/manifests/training-step-test.yaml | kubectl apply -f -
 #   kubectl logs -f job/training-step-test-${EXAMPLE_NAME}
 apiVersion: batch/v1

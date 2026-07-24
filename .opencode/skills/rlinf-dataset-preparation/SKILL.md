@@ -29,7 +29,6 @@ RLinf requires a pre-trained SFT model as the starting point for RL. Available f
 
 | Model | HuggingFace Path | Description |
 |-------|------------------|-------------|
-| OpenVLA-7B RL warmup | `gen-robot/openvla-7b-rlvla-warmup` | OpenVLA base for RL fine-tuning |
 | OpenVLA-OFT LIBERO-10 SFT | `RLinf/Openvla-oft-SFT-libero10-trajall` | All 500 trajectories per task |
 | Pi0 Spatial Object Goal SFT | `RLinf/RLinf-Pi0-SFT-Spatial-Object-Goal` | Pi0 model for spatial tasks |
 
@@ -60,8 +59,8 @@ spec:
             - |
               pip install huggingface_hub
               huggingface-cli download \
-                gen-robot/openvla-7b-rlvla-warmup \
-                --local-dir /fsx/models/sft-base/openvla-7b-rlvla-warmup \
+                RLinf/Openvla-oft-SFT-libero10-trajall \
+                --local-dir /fsx/models/sft-base/openvla-oft-sft-libero10 \
                 --local-dir-use-symlinks False
           volumeMounts:
             - name: fsx
@@ -83,12 +82,12 @@ kubectl logs -f job/download-sft-model
 # On a local machine or CI runner
 pip install huggingface_hub
 huggingface-cli download \
-  gen-robot/openvla-7b-rlvla-warmup \
-  --local-dir ./openvla-7b-rlvla-warmup
+  RLinf/Openvla-oft-SFT-libero10-trajall \
+  --local-dir ./openvla-oft-sft-libero10
 
 # Upload to S3
-aws s3 sync ./openvla-7b-rlvla-warmup \
-  s3://rlinf-on-eks-data/models/sft-base/openvla-7b-rlvla-warmup/
+aws s3 sync ./openvla-oft-sft-libero10 \
+  s3://rlinf-on-eks-data/models/sft-base/openvla-oft-sft-libero10/
 
 # If using FSx with S3 data repository association, files auto-import
 # Otherwise, sync from S3 inside a pod:
@@ -102,7 +101,7 @@ RLinf requires that VLA model code files are present in the checkpoint directory
 ```bash
 # This copies modeling_prismatic.py, configuration_prismatic.py, etc.
 # into the SFT model directory so from_pretrained() can load them
-bash examples/overwrite_vla_ckpt_utils.sh /fsx/models/sft-base/openvla-7b-rlvla-warmup
+bash examples/overwrite_vla_ckpt_utils.sh /fsx/models/sft-base/openvla-oft-sft-libero10
 ```
 
 This step must run **before** training starts. It can be an init container or a pre-training script in the training Job.
@@ -174,13 +173,12 @@ bash pre_collect_robotwin2_seed.sh
 /fsx/
 ├── models/
 │   └── sft-base/
-│       ├── openvla-7b-rlvla-warmup/          # OpenVLA RL warmup model
-│       │   ├── config.json
-│       │   ├── model-*.safetensors
-│       │   ├── tokenizer.json
-│       │   ├── modeling_prismatic.py        # Copied by overwrite script
-│       │   └── ...
-│       └── openvla-oft-libero10-trajall/    # Full-traj SFT model
+│       └── openvla-oft-sft-libero10/         # OpenVLA-OFT LIBERO-10 SFT model
+│           ├── config.json
+│           ├── model-*.safetensors
+│           ├── tokenizer.json
+│           ├── modeling_prismatic.py        # Copied by overwrite script
+│           └── ...
 ├── datasets/
 │   ├── libero/                              # LIBERO env assets
 │   └── robotwin/                            # RoboTwin env assets
@@ -201,9 +199,9 @@ bash pre_collect_robotwin2_seed.sh
 # Verify SFT model is complete
 python -c "
 from transformers import AutoModelForVision2Seq, AutoTokenizer
-model = AutoModelForVision2Seq.from_pretrained('/fsx/models/sft-base/openvla-7b-rlvla-warmup')
+model = AutoModelForVision2Seq.from_pretrained('/fsx/models/sft-base/openvla-oft-sft-libero10')
 print(f'Model loaded: {sum(p.numel() for p in model.parameters()) / 1e9:.1f}B params')
-tokenizer = AutoTokenizer.from_pretrained('/fsx/models/sft-base/openvla-7b-rlvla-warmup')
+tokenizer = AutoTokenizer.from_pretrained('/fsx/models/sft-base/openvla-oft-sft-libero10')
 print(f'Tokenizer vocab size: {tokenizer.vocab_size}')
 "
 ```

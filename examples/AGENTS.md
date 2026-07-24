@@ -37,8 +37,8 @@ All four examples run from ONE unified container image (`BUILD_TARGET=embodied-m
 
 | Example | `CONFIG_NAME` | `VENV_NAME` | `MODEL_PATH` |
 |---------|---------------|-------------|--------------|
-| ManiSkill+OpenVLA PPO | `maniskill_ppo_openvla_quickstart` | `openvla` | `/fsx/models/openvla-7b-rlvla-warmup` |
 | ManiSkill+OpenVLA-OFT PPO | `maniskill_ppo_openvlaoft_quickstart` | `openvla-oft` | `/fsx/models/openvla-oft-sft-libero10` |
+| Wan World Model GRPO | `wan_libero_spatial_grpo_openvlaoft` | `openvla-oft` | `/fsx/models/Openvla-oft-SFT-libero-spatial-traj1` (+ Wan world model `/fsx/models/RLinf-Wan-LIBERO-Spatial`) |
 | LIBERO+pi0 PPO | `libero_spatial_ppo_openpi_quickstart` | `openpi` | `/fsx/models/rlinf-pi0-sft-spatial` |
 | DreamZero LIBERO 14B SFT (multi-node) | `libero_sft_dreamzero_14b` | `dreamzero` | `/fsx/models/DreamZero-DROID` |
 
@@ -166,10 +166,10 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
 | `infrastructure/manifests/container-test.yaml` | Container validation (10 tests) |
 | `infrastructure/manifests/training-statefulset.yaml` | Multi-node StatefulSet for L6 validation (Ray) |
 | `infrastructure/manifests/training-service.yaml` | Headless Service for L6 validation |
-| `examples/maniskill-openvla-ppo/manifests/model-download.yaml` | Downloads OpenVLA model + ManiSkill assets |
-| `examples/maniskill-openvla-ppo/manifests/maniskill-openvla-ppo.yaml` | ManiSkill + OpenVLA PPO training Job |
 | `examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml` | Downloads OpenVLA-OFT model |
 | `examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml` | ManiSkill + OpenVLA-OFT PPO training Job |
+| `examples/wan-openvlaoft-grpo/manifests/model-download.yaml` | Downloads OpenVLA-OFT model + Wan world model |
+| `examples/wan-openvlaoft-grpo/manifests/wan-openvlaoft-grpo.yaml` | Wan world model + OpenVLA-OFT GRPO training Job |
 | `examples/libero-pi0-ppo/manifests/model-download.yaml` | Downloads pi0 SFT model |
 | `examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml` | LIBERO + pi0 PPO training Job |
 | `examples/dreamzero/manifests/model-download.yaml` | Downloads DreamZero-DROID ckpt + umt5-xxl + physical-intelligence/libero dataset |
@@ -188,8 +188,9 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
 
 | Model | HuggingFace Path | Used By |
 |-------|------------------|---------|
-| OpenVLA-7B RL warmup | `gen-robot/openvla-7b-rlvla-warmup` | ManiSkill+OpenVLA |
 | OpenVLA-OFT LIBERO-10 SFT | `RLinf/Openvla-oft-SFT-libero10-trajall` | ManiSkill+OpenVLA-OFT |
+| OpenVLA-OFT LIBERO-Spatial SFT | `Haozhan72/Openvla-oft-SFT-libero-spatial-traj1` | Wan World Model GRPO (policy) |
+| Wan world model (LIBERO-Spatial) | `RLinf/RLinf-Wan-LIBERO-Spatial` | Wan World Model GRPO (env) |
 | Pi0 Spatial SFT | `RLinf/RLinf-Pi0-SFT-Spatial-Object-Goal` | LIBERO+pi0 |
 | DreamZero-DROID | `GEAR-Dreams/DreamZero-DROID` | DreamZero LIBERO 14B SFT (14B warm-start backbone) |
 | umt5-xxl | `google/umt5-xxl` | DreamZero SFT (tokenizer) |

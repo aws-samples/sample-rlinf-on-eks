@@ -365,19 +365,14 @@ run_level_4() {
   log_header "L4: Model Download Verification"
 
   # Clean up any previous run
-  cleanup_job model-download-maniskill-openvla rlinf
   cleanup_job model-download-maniskill-openvlaoft rlinf
   cleanup_job model-download-libero-pi0 rlinf
 
   # Apply per-example model download jobs (run in parallel)
-  kubectl apply -n rlinf -f "${REPO_ROOT}/examples/maniskill-openvla-ppo/manifests/model-download.yaml"
   kubectl apply -n rlinf -f "${REPO_ROOT}/examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml"
   kubectl apply -n rlinf -f "${REPO_ROOT}/examples/libero-pi0-ppo/manifests/model-download.yaml"
 
   # Wait for all to complete (models are large -- up to 30 min)
-  if ! wait_for_job model-download-maniskill-openvla rlinf 3600; then
-    return 1
-  fi
   if ! wait_for_job model-download-maniskill-openvlaoft rlinf 3600; then
     return 1
   fi
@@ -387,13 +382,12 @@ run_level_4() {
 
   # Check logs for success
   local logs
-  logs=$(get_job_logs model-download-maniskill-openvla)
+  logs=$(get_job_logs model-download-maniskill-openvlaoft)
 
   if echo "$logs" | grep -q "Download complete"; then
     log_pass "All models downloaded successfully"
   else
     log_fail "Model download did not complete"
-    cleanup_job model-download-maniskill-openvla rlinf
     cleanup_job model-download-maniskill-openvlaoft rlinf
     cleanup_job model-download-libero-pi0 rlinf
     return 1
@@ -413,7 +407,7 @@ run_level_4() {
           "name": "verify",
           "image": "busybox",
           "command": ["sh", "-c",
-            "ok=0; fail=0; for d in openvla-7b-rlvla-warmup openvla-oft-sft-libero10 rlinf-pi0-sft-spatial; do if [ -d /fsx/models/$d ]; then echo \"OK: $d\"; ok=$((ok+1)); else echo \"MISSING: $d\"; fail=$((fail+1)); fi; done; echo \"Models: $ok found, $fail missing\"; exit $fail"
+            "ok=0; fail=0; for d in openvla-oft-sft-libero10 rlinf-pi0-sft-spatial; do if [ -d /fsx/models/$d ]; then echo \"OK: $d\"; ok=$((ok+1)); else echo \"MISSING: $d\"; fail=$((fail+1)); fi; done; echo \"Models: $ok found, $fail missing\"; exit $fail"
           ],
           "volumeMounts": [{"name": "fsx", "mountPath": "/fsx"}]
         }]
@@ -437,8 +431,7 @@ run_level_4() {
 
 # Per-example configurations
 # Format: "name|venv|config|model_path"
-L5_EXAMPLE_LIST="maniskill-openvla|openvla|maniskill_ppo_openvla_quickstart|/fsx/models/openvla-7b-rlvla-warmup
-maniskill-openvlaoft|openvla-oft|maniskill_ppo_openvlaoft_quickstart|/fsx/models/openvla-oft-sft-libero10
+L5_EXAMPLE_LIST="maniskill-openvlaoft|openvla-oft|maniskill_ppo_openvlaoft_quickstart|/fsx/models/openvla-oft-sft-libero10
 libero-pi0|openpi|libero_spatial_ppo_openpi_quickstart|/fsx/models/rlinf-pi0-sft-spatial"
 
 # get_l5_example NAME -> outputs "venv|config|model_path" or returns 1
@@ -468,12 +461,12 @@ run_level_5() {
     local check
     check=$(get_l5_example "$EXAMPLE_FILTER")
     if [[ -z "$check" ]]; then
-      log_fail "Unknown example: ${EXAMPLE_FILTER}. Valid: maniskill-openvla, maniskill-openvlaoft, libero-pi0"
+      log_fail "Unknown example: ${EXAMPLE_FILTER}. Valid: maniskill-openvlaoft, libero-pi0"
       return 1
     fi
     examples_to_run="$EXAMPLE_FILTER"
   else
-    examples_to_run="maniskill-openvla maniskill-openvlaoft libero-pi0"
+    examples_to_run="maniskill-openvlaoft libero-pi0"
   fi
 
   local overall_fail=0

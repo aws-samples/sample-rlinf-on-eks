@@ -74,7 +74,7 @@ docker push $ECR_URI:latest
 ```bash
 # Set ECR URI and deploy with envsubst
 export ECR_URI=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"')  # Replace with your reference name
-envsubst < examples/maniskill-openvla-ppo/manifests/maniskill-openvla-ppo.yaml | kubectl apply -f -
+envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
 # Monitor
 kubectl logs -f job/rlinf-training

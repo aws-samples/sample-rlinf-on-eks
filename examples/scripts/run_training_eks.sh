@@ -17,8 +17,8 @@
 #   - EFA environment variables set via pod spec
 #
 # Key environment variables (set via K8s manifest env):
-#   CONFIG_NAME    - Hydra config name (e.g., maniskill_ppo_openvla_quickstart)
-#   VENV_NAME      - Python venv to activate (e.g., openvla, openvla-oft, openpi)
+#   CONFIG_NAME    - Hydra config name (e.g., maniskill_ppo_openvlaoft_quickstart)
+#   VENV_NAME      - Python venv to activate (e.g., openvla-oft, openpi)
 #   MODEL_PATH     - Path to pre-trained model weights on shared storage
 #   CKPT_PATH      - Path to write checkpoints
 #   NUM_GPUS       - GPUs per node
@@ -29,10 +29,10 @@ set -x
 
 # --- Configuration (override via environment variables) ---
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-rlinf-eks}"
-CONFIG_NAME="${CONFIG_NAME:-maniskill_ppo_openvla_quickstart}"
-VENV_NAME="${VENV_NAME:-openvla}"
+CONFIG_NAME="${CONFIG_NAME:-maniskill_ppo_openvlaoft_quickstart}"
+VENV_NAME="${VENV_NAME:-openvla-oft}"
 
-MODEL_PATH="${MODEL_PATH:-/fsx/models/openvla-7b-rlvla-warmup}"
+MODEL_PATH="${MODEL_PATH:-/fsx/models/openvla-oft-sft-libero10}"
 CKPT_PATH="${CKPT_PATH:-/fsx/checkpoints}"
 
 NUM_GPUS="${NUM_GPUS:-8}"
