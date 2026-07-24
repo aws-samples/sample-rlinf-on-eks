@@ -17,6 +17,7 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
+data "aws_region" "current" {}
 
 data "aws_ecrpublic_authorization_token" "token" {
   provider = aws.virginia
@@ -57,23 +58,23 @@ locals {
   node_role_name                  = var.node_role_name != "" ? var.node_role_name : "${var.cluster_name}-gpu-training"
   karpenter_node_role_arn         = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.node_role_name}"
   karpenter_instance_profile_arns = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:instance-profile/*"
+  # Region-scoped EC2 ARN prefix for the tightened Karpenter provisioning policy.
+  ec2_arn_prefix = "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.name}"
 }
 
 resource "aws_iam_policy" "karpenter" {
   name = "${var.cluster_name}-karpenter"
 
-  # checkov:skip=CKV_AWS_355: The KarpenterReadOnly and KarpenterEC2Provisioning
-  #   statements require Resource="*". The EC2 Describe*, pricing:GetProducts, and
-  #   ssm:GetParameter actions do not support resource-level permissions. The
-  #   ec2:RunInstances/CreateFleet/CreateLaunchTemplate/CreateTags/DeleteLaunchTemplate
-  #   actions target resources Karpenter provisions dynamically, whose ARNs are not
-  #   known at policy-creation time, so this statement uses Resource="*" WITHOUT a
-  #   tag condition (only the separate ConditionalEC2Termination statement is
-  #   tag-scoped to karpenter.sh/nodepool). This mirrors the AWS-published Karpenter
-  #   controller policy; a tighter per-resource-type / aws:RequestTag+ec2:CreateAction
-  #   variant exists upstream but requires live-cluster provisioning validation to
-  #   adopt safely. The genuine privilege-escalation vectors (iam:PassRole and the
-  #   instance-profile actions) ARE scoped below.
+  # checkov:skip=CKV_AWS_355: Two statements use Resource="*", both for actions
+  #   that do not support resource-level permissions (AWS Service Authorization
+  #   Reference): KarpenterReadOnly (EC2 Describe*/pricing:GetProducts/
+  #   ssm:GetParameter/eks:DescribeCluster) and KarpenterInstanceProfileList
+  #   (iam:ListInstanceProfiles). Both are read/list-only. All mutating EC2
+  #   provisioning/tagging/deletion actions are scoped to region-qualified
+  #   per-resource-type ARNs with aws:RequestTag/aws:ResourceTag +
+  #   ec2:CreateAction conditions, ported verbatim from the official AWS Karpenter
+  #   v1.11.1 controller policy. Validated on a live EKS cluster: Karpenter
+  #   provisions nodes and runs instance-profile GC cleanly under this policy.
   # checkov:skip=CKV_AWS_286: iam:PassRole is scoped to the Karpenter node role ARN
   #   with an iam:PassedToService=ec2.amazonaws.com condition, and instance-profile
   #   mutations are scoped to this account's instance profiles. No wildcard PassRole.
@@ -85,11 +86,13 @@ resource "aws_iam_policy" "karpenter" {
         Effect = "Allow"
         Action = [
           "ec2:DescribeAvailabilityZones",
+          "ec2:DescribeCapacityReservations",
           "ec2:DescribeImages",
           "ec2:DescribeInstances",
           "ec2:DescribeInstanceTypeOfferings",
           "ec2:DescribeInstanceTypes",
           "ec2:DescribeLaunchTemplates",
+          "ec2:DescribePlacementGroups",
           "ec2:DescribeSecurityGroups",
           "ec2:DescribeSpotPriceHistory",
           "ec2:DescribeSubnets",
@@ -99,26 +102,121 @@ resource "aws_iam_policy" "karpenter" {
         ]
         Resource = "*"
       },
+      # --- Official Karpenter v1.11.1 scoped EC2 provisioning statements ---
       {
-        Sid    = "KarpenterEC2Provisioning"
+        Sid    = "AllowScopedEC2InstanceAccessActions"
         Effect = "Allow"
-        Action = [
-          "ec2:CreateFleet",
-          "ec2:CreateLaunchTemplate",
-          "ec2:CreateTags",
-          "ec2:DeleteLaunchTemplate",
-          "ec2:RunInstances",
+        Resource = [
+          "${local.ec2_arn_prefix}::image/*",
+          "${local.ec2_arn_prefix}::snapshot/*",
+          "${local.ec2_arn_prefix}:*:security-group/*",
+          "${local.ec2_arn_prefix}:*:subnet/*",
+          "${local.ec2_arn_prefix}:*:capacity-reservation/*",
+          "${local.ec2_arn_prefix}:*:placement-group/*",
         ]
-        Resource = "*"
+        Action = ["ec2:RunInstances", "ec2:CreateFleet"]
       },
       {
-        Sid      = "ConditionalEC2Termination"
+        Sid      = "AllowScopedEC2LaunchTemplateAccessActions"
         Effect   = "Allow"
-        Action   = "ec2:TerminateInstances"
-        Resource = "*"
+        Resource = "${local.ec2_arn_prefix}:*:launch-template/*"
+        Action   = ["ec2:RunInstances", "ec2:CreateFleet"]
         Condition = {
+          StringEquals = {
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" = "owned"
+          }
           StringLike = {
-            "ec2:ResourceTag/karpenter.sh/nodepool" = "*"
+            "aws:ResourceTag/karpenter.sh/nodepool" = "*"
+          }
+        }
+      },
+      {
+        Sid    = "AllowScopedEC2InstanceActionsWithTags"
+        Effect = "Allow"
+        Resource = [
+          "${local.ec2_arn_prefix}:*:fleet/*",
+          "${local.ec2_arn_prefix}:*:instance/*",
+          "${local.ec2_arn_prefix}:*:volume/*",
+          "${local.ec2_arn_prefix}:*:network-interface/*",
+          "${local.ec2_arn_prefix}:*:launch-template/*",
+          "${local.ec2_arn_prefix}:*:spot-instances-request/*",
+        ]
+        Action = ["ec2:RunInstances", "ec2:CreateFleet", "ec2:CreateLaunchTemplate"]
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/kubernetes.io/cluster/${var.cluster_name}" = "owned"
+            "aws:RequestTag/eks:eks-cluster-name"                      = var.cluster_name
+          }
+          StringLike = {
+            "aws:RequestTag/karpenter.sh/nodepool" = "*"
+          }
+        }
+      },
+      {
+        Sid    = "AllowScopedResourceCreationTagging"
+        Effect = "Allow"
+        Resource = [
+          "${local.ec2_arn_prefix}:*:fleet/*",
+          "${local.ec2_arn_prefix}:*:instance/*",
+          "${local.ec2_arn_prefix}:*:volume/*",
+          "${local.ec2_arn_prefix}:*:network-interface/*",
+          "${local.ec2_arn_prefix}:*:launch-template/*",
+          "${local.ec2_arn_prefix}:*:spot-instances-request/*",
+        ]
+        Action = "ec2:CreateTags"
+        Condition = {
+          StringEquals = {
+            "aws:RequestTag/kubernetes.io/cluster/${var.cluster_name}" = "owned"
+            "aws:RequestTag/eks:eks-cluster-name"                      = var.cluster_name
+            "ec2:CreateAction" = [
+              "RunInstances",
+              "CreateFleet",
+              "CreateLaunchTemplate",
+            ]
+          }
+          StringLike = {
+            "aws:RequestTag/karpenter.sh/nodepool" = "*"
+          }
+        }
+      },
+      {
+        Sid      = "AllowScopedResourceTagging"
+        Effect   = "Allow"
+        Resource = "${local.ec2_arn_prefix}:*:instance/*"
+        Action   = "ec2:CreateTags"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" = "owned"
+          }
+          StringLike = {
+            "aws:ResourceTag/karpenter.sh/nodepool" = "*"
+          }
+          StringEqualsIfExists = {
+            "aws:RequestTag/eks:eks-cluster-name" = var.cluster_name
+          }
+          "ForAllValues:StringEquals" = {
+            "aws:TagKeys" = [
+              "eks:eks-cluster-name",
+              "karpenter.sh/nodeclaim",
+              "Name",
+            ]
+          }
+        }
+      },
+      {
+        Sid    = "AllowScopedDeletion"
+        Effect = "Allow"
+        Resource = [
+          "${local.ec2_arn_prefix}:*:instance/*",
+          "${local.ec2_arn_prefix}:*:launch-template/*",
+        ]
+        Action = ["ec2:TerminateInstances", "ec2:DeleteLaunchTemplate"]
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/kubernetes.io/cluster/${var.cluster_name}" = "owned"
+          }
+          StringLike = {
+            "aws:ResourceTag/karpenter.sh/nodepool" = "*"
           }
         }
       },
@@ -134,6 +232,17 @@ resource "aws_iam_policy" "karpenter" {
           "iam:TagInstanceProfile",
         ]
         Resource = local.karpenter_instance_profile_arns
+      },
+      {
+        # iam:ListInstanceProfiles cannot be resource-scoped (no resource-level
+        # support), so it uses Resource="*". Required by Karpenter's
+        # instanceprofile.garbagecollection controller; without it the controller
+        # logs AccessDenied and cannot reap orphaned instance profiles. Matches
+        # the official AWS Karpenter v1.11.1 policy's "AllowInstanceProfileList".
+        Sid      = "KarpenterInstanceProfileList"
+        Effect   = "Allow"
+        Action   = "iam:ListInstanceProfiles"
+        Resource = "*"
       },
       {
         Sid      = "KarpenterPassNodeRole"
