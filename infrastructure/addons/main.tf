@@ -65,12 +65,15 @@ resource "aws_iam_policy" "karpenter" {
   # checkov:skip=CKV_AWS_355: The KarpenterReadOnly and KarpenterEC2Provisioning
   #   statements require Resource="*". The EC2 Describe*, pricing:GetProducts, and
   #   ssm:GetParameter actions do not support resource-level permissions. The
-  #   ec2:RunInstances/CreateFleet/CreateLaunchTemplate actions target ad-hoc
-  #   resources whose ARNs are not known ahead of time (Karpenter provisions nodes
-  #   dynamically); they are constrained by the karpenter.sh/nodepool tag condition
-  #   where the action supports it. This matches the AWS-published Karpenter
-  #   controller policy. The genuine privilege-escalation vectors (iam:PassRole and
-  #   the instance-profile actions) ARE scoped below.
+  #   ec2:RunInstances/CreateFleet/CreateLaunchTemplate/CreateTags/DeleteLaunchTemplate
+  #   actions target resources Karpenter provisions dynamically, whose ARNs are not
+  #   known at policy-creation time, so this statement uses Resource="*" WITHOUT a
+  #   tag condition (only the separate ConditionalEC2Termination statement is
+  #   tag-scoped to karpenter.sh/nodepool). This mirrors the AWS-published Karpenter
+  #   controller policy; a tighter per-resource-type / aws:RequestTag+ec2:CreateAction
+  #   variant exists upstream but requires live-cluster provisioning validation to
+  #   adopt safely. The genuine privilege-escalation vectors (iam:PassRole and the
+  #   instance-profile actions) ARE scoped below.
   # checkov:skip=CKV_AWS_286: iam:PassRole is scoped to the Karpenter node role ARN
   #   with an iam:PassedToService=ec2.amazonaws.com condition, and instance-profile
   #   mutations are scoped to this account's instance profiles. No wildcard PassRole.
