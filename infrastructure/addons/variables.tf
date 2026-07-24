@@ -59,9 +59,9 @@ variable "enable_monitoring" {
 }
 
 variable "grafana_password" {
-  description = "Grafana admin password (only used when enable_monitoring = true)"
+  description = "Grafana admin password (required only when enable_monitoring = true). Set via TF_VAR_grafana_password or -var; do not commit a real value."
   type        = string
-  default     = "admin"
+  default     = ""
   sensitive   = true
 }
 

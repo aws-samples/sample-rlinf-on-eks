@@ -288,6 +288,13 @@ resource "helm_release" "prometheus" {
     name  = "prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues"
     value = "false"
   }
+
+  lifecycle {
+    precondition {
+      condition     = var.grafana_password != ""
+      error_message = "grafana_password must be set when enable_monitoring = true (e.g. export TF_VAR_grafana_password=... or pass -var grafana_password=...). Do not commit a real value."
+    }
+  }
 }
 
 # --- DCGM Exporter ServiceMonitor ---
