@@ -174,7 +174,7 @@ rlinf-on-eks/
 
 ### GPU Capacity
 
-P-class GPU instances (p4d, p5, p5en) have limited availability. In most regions you will need to purchase a [Capacity Block for ML (Machine Learning)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/capacity-blocks-using.html) to guarantee access to GPU nodes. You must also have sufficient [service quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html) for the instance type you intend to use.
+P-class GPU instances (p4d, p5, p5en) have limited availability. In most regions you will need to purchase a [Capacity Block for ML (Machine Learning)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/capacity-blocks-using.html) to reserve access to GPU nodes. You must also have sufficient [service quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html) for the instance type you intend to use.
 
 The tfvars files created in Step 1 configure Karpenter to provision nodes from your Capacity Block. The `target_az` ensures the VPC subnet, FSx filesystem, system nodes, and GPU nodes all deploy in the same Availability Zone as your reserved capacity.
 

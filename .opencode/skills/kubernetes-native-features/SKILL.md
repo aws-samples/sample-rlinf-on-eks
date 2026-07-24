@@ -88,7 +88,7 @@ spec:
 
 ### Network Topology-Aware Scheduling (3+ Nodes)
 
-When scaling beyond 2 nodes or when a cluster placement group cannot guarantee co-location, use EC2 instance topology labels to schedule pods on physically proximate nodes. See [Skill 04: Networking - EFA](networking-efa/SKILL.md#topology-aware-scheduling-for-multi-node-training) for full details.
+When scaling beyond 2 nodes or when a cluster placement group cannot ensure co-location, use EC2 instance topology labels to schedule pods on physically proximate nodes. See [Skill 04: Networking - EFA](networking-efa/SKILL.md#topology-aware-scheduling-for-multi-node-training) for full details.
 
 Nodes are labeled with their position in the datacenter network hierarchy:
 - `topology.k8s.aws/network-node-layer-1` -- top-level switch

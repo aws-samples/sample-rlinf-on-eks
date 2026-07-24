@@ -138,7 +138,7 @@ Common quota codes:
 
 ### Capacity Reservations
 
-For predictable workloads, use Capacity Reservations to guarantee instance availability:
+For predictable workloads, use Capacity Reservations (On-Demand Capacity Reservations or Capacity Blocks for ML) to reserve instance capacity in advance:
 
 ```bash
 aws ec2 create-capacity-reservation \
