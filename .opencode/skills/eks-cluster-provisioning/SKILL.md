@@ -658,7 +658,7 @@ helm list -A
 ## Cost Optimization
 
 - Set `gpu_node_count = 0` and use Cluster Autoscaler or Karpenter to scale on demand
-- Consider Capacity Reservations for guaranteed GPU availability
+- Consider Capacity Reservations (ODCR) for reserved GPU capacity
 - Use On-Demand for training (Spot is risky for long RL training jobs due to interruptions)
 - Scale down system nodes to minimum during idle periods
 - Use `terraform destroy -target=module.eks.eks_managed_node_groups["gpu-training"]` to remove GPU nodes without destroying the cluster

@@ -332,7 +332,7 @@ kubectl exec <pod-name> -- df -h /fsx
 kubectl exec <pod-name> -- ls /fsx/checkpoints/<experiment>/actor/
 
 # Archive to S3
-aws s3 sync /fsx/checkpoints/ s3://rlinf-on-eks-data/checkpoints/  # Replace with your bucket name
+aws s3 sync /fsx/checkpoints/ s3://YOUR-DATA-BUCKET/checkpoints/  # Replace with your bucket name
 
 # Clean up Job
 kubectl delete job rlinf-training

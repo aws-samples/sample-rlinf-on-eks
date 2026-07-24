@@ -36,6 +36,16 @@ resource "aws_s3_bucket_versioning" "codebuild_source" {
   }
 }
 
+# Block all public access to the CodeBuild source bucket (private build inputs).
+resource "aws_s3_bucket_public_access_block" "codebuild_source" {
+  bucket = aws_s3_bucket.codebuild_source.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # --- ECR Repository ---
 
 # Customer-managed KMS key for encrypting ECR image layers at rest (CKV_AWS_136).

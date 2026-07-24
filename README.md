@@ -192,19 +192,22 @@ Karpenter uses `reserved` capacity type for both Capacity Blocks and ODCRs. It p
 
 ### Terraform State Backend
 
-All five infrastructure layers store state in a shared S3 bucket with separate keys per layer (e.g., `cluster/terraform.tfstate`, `storage/terraform.tfstate`). Create this bucket before running `deploy.sh`:
+All five infrastructure layers store state in a shared S3 bucket with separate keys per layer (e.g., `cluster/terraform.tfstate`, `storage/terraform.tfstate`). Create this bucket before running `deploy.sh`. **Choose a globally-unique bucket name** (S3 bucket names are global; do not reuse the placeholder verbatim):
 
 ```bash
+# Replace with your own globally-unique bucket name
+export TF_STATE_BUCKET="<your-account>-rlinf-on-eks-tfstate"
+
 aws s3api create-bucket \
-  --bucket rlinf-on-eks-terraform-state \
+  --bucket "$TF_STATE_BUCKET" \
   --region us-east-1
-  
+
 aws s3api put-bucket-versioning \
-  --bucket rlinf-on-eks-terraform-state \
+  --bucket "$TF_STATE_BUCKET" \
   --versioning-configuration Status=Enabled
 ```
 
-After creating the bucket, update the `backend "s3"` block in each layer's `versions.tf` to match your bucket name and region. State locking uses Terraform's native S3 lockfile mechanism (`use_lockfile = true`) — no DynamoDB table is required. Versioning is recommended so you can recover state if a layer apply is interrupted.
+After creating the bucket, set the `bucket` field in the `backend "s3"` block of each layer's `versions.tf` (currently `REPLACE-WITH-YOUR-TF-STATE-BUCKET`) to your bucket name and region. State locking uses Terraform's native S3 lockfile mechanism (`use_lockfile = true`) — no DynamoDB table is required. Versioning is recommended so you can recover state if a layer apply is interrupted.
 
 ---
 

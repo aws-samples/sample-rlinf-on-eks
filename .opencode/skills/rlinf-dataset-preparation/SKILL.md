@@ -87,11 +87,11 @@ huggingface-cli download \
 
 # Upload to S3
 aws s3 sync ./openvla-oft-sft-libero10 \
-  s3://rlinf-on-eks-data/models/sft-base/openvla-oft-sft-libero10/
+  s3://YOUR-DATA-BUCKET/models/sft-base/openvla-oft-sft-libero10/
 
 # If using FSx with S3 data repository association, files auto-import
 # Otherwise, sync from S3 inside a pod:
-# aws s3 sync s3://rlinf-on-eks-data/models/ /fsx/models/
+# aws s3 sync s3://YOUR-DATA-BUCKET/models/ /fsx/models/
 ```
 
 ### 2. Prepare the VLA Checkpoint Directory

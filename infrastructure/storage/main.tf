@@ -41,6 +41,16 @@ resource "aws_s3_bucket_versioning" "fsx_data" {
   }
 }
 
+# Block all public access to the FSx data bucket (private backing store).
+resource "aws_s3_bucket_public_access_block" "fsx_data" {
+  bucket = aws_s3_bucket.fsx_data.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 # --- FSx Security Group ---
 
 resource "aws_security_group" "fsx" {

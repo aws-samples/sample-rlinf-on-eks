@@ -12,7 +12,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "rlinf-on-eks-terraform-state-usw2"
+    bucket       = "REPLACE-WITH-YOUR-TF-STATE-BUCKET"
     key          = "build/terraform.tfstate"
     region       = "us-west-2"
     use_lockfile = true
