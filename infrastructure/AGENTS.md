@@ -37,6 +37,7 @@
 - **Always use `deploy.sh`** to apply layers in order. Direct `terraform apply` in a single layer requires manually passing `-var` flags from upstream layers.
 - **Cross-layer dependencies** are resolved via `terraform output` from upstream layers. If you change an output in `cluster/`, downstream layers need re-plan.
 - **State bucket must exist before first deploy.** Create manually or use the bootstrap command in the root README.
+- **Backend bucket/region come from `infrastructure/backend.hcl`** (gitignored; copy from `backend.hcl.example`). `deploy.sh` passes it via `terraform init -backend-config=... -reconfigure`. Do NOT hardcode bucket/region in `versions.tf` — those blocks are partial config (`key` + `use_lockfile` only).
 
 ### CodeBuild
 

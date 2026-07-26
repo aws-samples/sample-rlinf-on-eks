@@ -8,6 +8,8 @@
 *.tfplan
 tfplan
 .terraform.lock.hcl
+# Backend config (account-specific bucket/region; use backend.hcl.example as template)
+infrastructure/backend.hcl
 
 # Build artifacts
 *.zip

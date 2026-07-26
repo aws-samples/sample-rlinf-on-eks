@@ -1,0 +1,19 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Terraform S3 backend configuration (account-specific).
+#
+# Setup:
+#   1. Create your state bucket (see README > Terraform state backend).
+#   2. cp infrastructure/backend.hcl.example infrastructure/backend.hcl
+#   3. Set the values below to your bucket + region.
+#
+# deploy.sh passes this file to every layer via:
+#   terraform init -backend-config=infrastructure/backend.hcl
+#
+# backend.hcl is gitignored so your account-specific values never land in
+# version control. The per-layer state key and lock setting live in each
+# layer's versions.tf (committed).
+
+bucket = "REPLACE-WITH-YOUR-TF-STATE-BUCKET"
+region = "us-west-2"

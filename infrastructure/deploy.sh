@@ -83,8 +83,16 @@ get_output() {
 # -------------------------------------------------------------------
 init_layer() {
   local layer="$1"
+  local backend_config="${SCRIPT_DIR}/backend.hcl"
+  if [[ ! -f "$backend_config" ]]; then
+    echo "ERROR: ${backend_config} not found."
+    echo "       Copy infrastructure/backend.hcl.example to infrastructure/backend.hcl"
+    echo "       and set your Terraform state bucket + region. See README (Terraform state backend)."
+    exit 1
+  fi
   log "Initializing ${layer}..."
-  terraform -chdir="${SCRIPT_DIR}/${layer}" init -input=false
+  terraform -chdir="${SCRIPT_DIR}/${layer}" init -input=false -reconfigure \
+    -backend-config="$backend_config"
 }
 
 # -------------------------------------------------------------------

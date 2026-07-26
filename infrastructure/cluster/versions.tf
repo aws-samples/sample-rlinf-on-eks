@@ -15,10 +15,12 @@ terraform {
     }
   }
 
+  # Partial backend config: bucket + region are supplied at init time via
+  # -backend-config=infrastructure/backend.hcl (see backend.hcl.example).
+  # deploy.sh passes this automatically. Keeps account-specific values out of
+  # version control.
   backend "s3" {
-    bucket       = "REPLACE-WITH-YOUR-TF-STATE-BUCKET"
     key          = "cluster/terraform.tfstate"
-    region       = "us-west-2"
     use_lockfile = true
   }
 }

@@ -207,7 +207,16 @@ aws s3api put-bucket-versioning \
   --versioning-configuration Status=Enabled
 ```
 
-After creating the bucket, set the `bucket` field in the `backend "s3"` block of each layer's `versions.tf` (currently `REPLACE-WITH-YOUR-TF-STATE-BUCKET`) to your bucket name and region. State locking uses Terraform's native S3 lockfile mechanism (`use_lockfile = true`) — no DynamoDB table is required. Versioning is recommended so you can recover state if a layer apply is interrupted.
+After creating the bucket, copy the backend config template and set your bucket + region:
+
+```bash
+cp infrastructure/backend.hcl.example infrastructure/backend.hcl
+# Edit infrastructure/backend.hcl:
+#   bucket = "<your TF_STATE_BUCKET>"
+#   region = "<your region, e.g. us-east-1>"
+```
+
+`deploy.sh` passes `infrastructure/backend.hcl` to every layer via `terraform init -backend-config=...`, so you do **not** edit any `versions.tf` file. `backend.hcl` is gitignored, keeping your account-specific values out of version control. The per-layer state key and lock setting are committed in each layer's `versions.tf`. State locking uses Terraform's native S3 lockfile mechanism (`use_lockfile = true`) — no DynamoDB table is required. Versioning is recommended so you can recover state if a layer apply is interrupted.
 
 ---
 
@@ -292,7 +301,7 @@ Infrastructure is layered (cluster → storage → addons → workloads → buil
 - Use `./infrastructure/deploy.sh --action plan --layer <layer>` to preview changes
 - Never apply layers out of order — downstream layers depend on upstream outputs
 - If adding a new Terraform variable, update both `variables.tf` and document it in `infrastructure/README.md`
-- Backend configuration changes (bucket, region) must be updated in all five `versions.tf` files
+- Backend bucket/region live in `infrastructure/backend.hcl` (gitignored; template: `backend.hcl.example`), not in `versions.tf` — change them in one place
 
 ### Adding or Modifying Skills
 
