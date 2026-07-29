@@ -12,7 +12,8 @@
 #
 # Prerequisites:
 #   - model-download.yaml completed (downloads rlinf-pi0-sft-spatial)
-#   - LIBERO dataset staged on FSx (see dataset-preparation skill)
+#   - LIBERO dataset at /fsx/datasets/libero (auto-downloads on first run;
+#     optionally pre-stage via the dataset-preparation skill)
 #
 # Usage:
 #   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf

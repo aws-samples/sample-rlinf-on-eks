@@ -88,7 +88,12 @@ python examples/scripts/plot_training_curve.py \
 - FSx for Lustre with pre-staged model weights (`rlinf-pi0-sft-spatial`) and LIBERO dataset
 - Container image built and pushed to ECR (Elastic Container Registry)
 
-### 1. Download Model Weights and Dataset
+### 1. Download Model Weights
+
+Downloads the pi0 SFT checkpoint to FSx. The LIBERO simulator dataset is **not**
+downloaded here — LIBERO auto-downloads its assets to `LIBERO_DATASET_DIR`
+(`/fsx/datasets/libero`) on the first training run. To pre-stage it for faster
+startup, see the `rlinf-dataset-preparation` skill.
 
 ```bash
 export NAMESPACE=rlinf  # or your namespace
