@@ -39,6 +39,16 @@ spec:
             # env offload runs fine on p5en H200 (141GB); revisit for smaller GPUs.
             - name: HYDRA_OVERRIDES
               value: "env.train.wan_wm_hf_ckpt_path=/fsx/models/RLinf-Wan-LIBERO-Spatial env.train.enable_offload=False"
+            # Evaluation runs in the REAL LIBERO simulator (env/eval: libero_spatial),
+            # a different backend than the Wan training env. It needs the LIBERO
+            # dataset + platform vars below. Eval is OFF by default in the shipped
+            # config (runner.val_check_interval=-1); enable it by appending e.g.
+            # runner.val_check_interval=<N> to HYDRA_OVERRIDES. These vars are inert
+            # when eval is disabled, so they are safe to keep set.
+            - name: LIBERO_DATASET_DIR
+              value: "/fsx/datasets/libero"
+            - name: ROBOT_PLATFORM
+              value: "LIBERO"
             - name: NUM_GPUS
               value: "8"
             - name: NUM_NODES
