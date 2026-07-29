@@ -70,7 +70,7 @@ This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for th
 | **Python** | uv-managed venvs | Python 3.11 |
 | **Framework** | PyTorch | 2.6.0 (upstream default) |
 | **CUDA** | CUDA (Compute Unified Device Architecture) Toolkit | 12.4 |
-| **RL Framework** | RLinf | 0.2 |
+| **RL Framework** | RLinf | 0.3 |
 | **Distributed** | Ray | >=2.47.0 |
 | **EFA** | EFA Installer | 1.47.0 |
 | **NCCL** | NCCL (source-built) | 2.21.5-1 |
