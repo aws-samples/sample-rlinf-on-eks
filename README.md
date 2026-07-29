@@ -276,13 +276,16 @@ Skills are prescriptive guides for deploying Embodied/Agentic RL workloads on EK
 
 ## Contributing
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the general pull-request process (fork,
+branch, open a PR). This project additionally asks that you validate your changes:
+
 ### Workflow
 
-1. Create a feature branch from `main`
+1. Fork the repository and create a feature branch from `main` on your fork
 2. Make your changes
 3. Run local validation: `./validate.sh --mode local` (terraform fmt, kubeconform, shellcheck, path integrity)
 4. If you have cluster access, run relevant cluster validation levels (e.g., `./validate.sh --mode cluster --level 2`)
-5. Open a PR with a description of what changed and which validation levels passed
+5. Open a PR from your fork with a description of what changed and which validation levels passed
 
 ### Adding a New Training Example
 
