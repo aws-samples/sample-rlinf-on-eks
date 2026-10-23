@@ -3,7 +3,8 @@
 
 # Download Model Weights for ManiSkill + OpenVLA-OFT PPO
 #
-# Downloads the OpenVLA-OFT SFT checkpoint (fine-tuned on LIBERO-10).
+# Downloads the OpenVLA-OFT SFT checkpoint (fine-tuned on LIBERO-10) and the
+# ManiSkill LoRA adapter (RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Lora).
 # ManiSkill assets are shared with the OpenVLA example -- run that download first
 # or ensure /fsx/assets/maniskill exists.
 #
@@ -93,6 +94,32 @@ spec:
               # Model: OpenVLA-OFT fine-tuned on LIBERO-10
               download_model "RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Main" "/fsx/models/openvla-oft-sft-libero10"
 
+              # LoRA adapter bridging LIBERO SFT -> ManiSkill (actor.model.lora_path).
+              # A PEFT adapter has adapter_config.json, not config.json, so it gets
+              # its own existence check instead of download_model's.
+              LORA_DIR=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
+              echo ""
+              echo "=== LoRA: RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Lora ==="
+              echo "  Target: $LORA_DIR"
+              if [ -f "$LORA_DIR/adapter_config.json" ] && [ -f "$LORA_DIR/adapter_model.safetensors" ]; then
+                echo "  Already exists. Skipping."
+              else
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Lora',
+                  local_dir='$LORA_DIR',
+              )
+              print('  Download complete')
+              "
+                du -sh "$LORA_DIR" | awk '{print "  Size: " $1}'
+              fi
+              if [ ! -f "$LORA_DIR/adapter_config.json" ] || [ ! -f "$LORA_DIR/adapter_model.safetensors" ]; then
+                echo "ERROR: LoRA adapter files missing in $LORA_DIR"
+                exit 1
+              fi
+
               # ManiSkill assets (shared with OpenVLA example)
               download_dataset "RLinf/maniskill_assets" "/fsx/assets/maniskill"
 
@@ -100,6 +127,7 @@ spec:
               echo "=== Download complete ==="
               echo "Models:"
               du -sh /fsx/models/openvla-oft-sft-libero10 2>/dev/null || echo "  (not found)"
+              du -sh /fsx/models/rlinf-openvlaoft-maniskill-base-lora 2>/dev/null || echo "  (not found)"
               echo "Assets:"
               du -sh /fsx/assets/maniskill 2>/dev/null || echo "  (not found)"
           resources:

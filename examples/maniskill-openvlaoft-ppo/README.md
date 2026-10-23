@@ -53,6 +53,8 @@ The model diagram shows the complete OFT adaptation pattern. RGB observations fr
 
 ## Results
 
+> Reference run produced on RLinf v0.3. Revalidated on RLinf main@c70606f0 (2026-10) with a short 5-step end-to-end run (SFT-start success 32.1% — step-1 train-rollout `success_once`, since upstream has no step-0 eval; step time ~192–199 s vs ~230 s on v0.3 — within 10% on success, faster on step time); full convergence was not re-run. The curve and numbers below are from the v0.3 run.
+
 ![Training Curve](assets/training_curve.png)
 
 | Metric | Value |
@@ -117,10 +119,12 @@ export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repositor
 export NAMESPACE=rlinf
 export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)
 export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
-export LORA_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/lora_weights/
+export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora  # base adapter staged by model-download.yaml
 
 ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
 ```
+
+At main@c70606f0 a checkpoint contains only `dcp_checkpoint/` and `model_state_dict/full_weights.pt` (there is no `lora_weights/` directory). `full_weights.pt` (`runner.ckpt_path`) carries the trained LoRA weights; `LORA_PATH` points at the base adapter staged by `model-download.yaml` and only supplies the PEFT adapter structure (config + module layout) that the trained weights are loaded into.
 
 The script deploys `manifests/eval-video.yaml` as a Kubernetes Job, waits for completion, downloads the raw video from S3, then **strips duplicate frames** (keeping every 8th) via ffmpeg to produce smooth playback. The OFT model uses `num_action_chunks=8`, meaning 7 out of every 8 rendered frames are duplicates — the script handles this automatically based on the `rlinf.io/num-action-chunks` annotation in the manifest.
 

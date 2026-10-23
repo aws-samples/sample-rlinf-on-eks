@@ -8,8 +8,8 @@
 ### EFA Networking
 
 - **EKS node SG needs self-referencing egress rule** (protocol `-1`, self -> self). Without it, EFA RDMA silently fails with `comp_status 5 err -22`. The ingress rule alone is NOT enough.
-- **EFA installer must be >= 1.47.0**. Versions 1.34.0/1.38.0 bundle broken libfabric 1.22.
-- **NCCL v2.21.5-1 for CUDA 12.4 base** -- NCCL 2.29+ requires CUDA 12.8+.
+- **EFA installer 1.50.0 in the image (with `--disable-ngc`); >= 1.47.0 on hosts**. Versions 1.34.0/1.38.0 bundle broken libfabric 1.22. `cluster/scripts/gpu-node-bootstrap.sh` still pins the host installer at 1.47.0 (driver/kmod); bumping it requires node replacement.
+- **NCCL v2.31.2-1 on the CUDA 12.8.1 base** (upstream moved to CUDA 12.8 at main@6f46f36a); sm_100 (B200) is in the gencode list. aws-ofi-nccl 1.21.1 (EFA 1.50.0) is tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either.
 - **`efa_nv_peermem` kernel module** is installed but NOT loaded on EKS GPU AMI. Needs DaemonSet with `modprobe`.
 - **Single-EFA instances**: use `--mca mtl ^ofi` with OpenMPI to avoid OFI MTL conflicts with NCCL.
 
@@ -30,6 +30,7 @@
 - **Karpenter replaces managed GPU node groups.** GPU nodes are provisioned on-demand when training pods are pending. NodePool `limits` prevent runaway spending.
 - **Capacity Blocks / ODCRs**: Set `capacity_type = ["reserved", "on-demand"]` and `capacity_reservation_selector = [{id = "cr-..."}]` in workloads layer. Karpenter uses `karpenter.sh/capacity-type: reserved` (NOT `capacity-block`). The `ReservedCapacity` feature gate is enabled by default since Karpenter v1.6.
 - **Instance flexibility**: Default `gpu_instance_families = ["g6", "g6e", "g5"]` gives Karpenter fallback options when specific types lack capacity. Override with `gpu_instance_types` for Capacity Blocks.
+- **GPU node labels**: the `gpu-training` NodePool sets BOTH `role=gpu-training` (selected by smoke-test, topology-labeler, NCCL MPIJobs, training-statefulset, tests and `tests/lib/cluster.sh`) and `node-role=gpu-training` (selected by `container-test.yaml`). Deployments created before `role` was added must re-apply the workloads layer (`./infrastructure/deploy.sh --action apply --layer workloads`); only nodes provisioned after that carry the `role` label.
 - **`target_az`** in cluster layer ensures VPC subnet, FSx, system nodes, and NodePool zone constraint all align to the reservation's AZ.
 
 ### State Management

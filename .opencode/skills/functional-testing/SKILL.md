@@ -58,9 +58,20 @@ watch kubectl get pods -o wide
 kubectl logs -f $(kubectl get pods | grep launcher | cut -d ' ' -f 1)
 ```
 
+### Full-node NCCL test (p5en.48xlarge, the L3 gate)
+
+On p5en.48xlarge, `validate.sh` L3 runs `nccl-allreduce-fullnode.yaml` instead: `all_reduce_perf` from the training image (nccl-tests v2.20.0, NCCL v2.31.2-1, aws-ofi-nccl 1.21.1), 2 workers x 8 GPU x 16 EFA, 8 B-16 GiB. Workers start sshd themselves; the launcher log stays empty for ~1-2 min until worker DNS resolves (not a hang).
+
+```bash
+envsubst '${ECR_URI}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
+kubectl -n rlinf logs -f $(kubectl -n rlinf get pods -o name | grep fullnode-launcher)
+```
+
+Pass criterion: out-of-place busbw of the 16 GiB row >= 391 GB/s (80% of measured; override with `L3_P5EN_THRESHOLD`). Measured 2026-10, two runs: **489.50 / 489.65 GB/s** at 16 GiB. Ignore the `Avg bus bandwidth` line (~134.8): it averages the whole sweep, including latency-bound small sizes.
+
 ### What to Check
 
-1. **EFA provider selected**: Look for `NET/OFI Selected Provider is efa` (NOT `socket`)
+1. **EFA provider selected**: Look for `Selected Provider is efa` / `Selected provider is efa` (aws-ofi-nccl 1.21 is lowercase; NOT `socket`)
 2. **No crashes**: No `cm_req_handle_error_entry` or `Caught signal 11`
 3. **Reasonable bandwidth**: g6.8xlarge should show ~2-3 GB/s BusBW at 1GB
 4. **All GPUs participating**: Verify `-np` matches expected GPU count
@@ -201,6 +212,8 @@ See `infrastructure/manifests/nccl-tests-mpijob.yaml`. Adjust for your instance 
 Expected results (2x p5.48xlarge):
 - 1 GB message: ~437 GB/s BusBW
 - 16 GB message: ~487 GB/s BusBW
+
+Measured on 2x p5en.48xlarge with `nccl-allreduce-fullnode.yaml` (our image, 2026-10): 1 GiB ~444, 16 GiB 489.50 / 489.65 GB/s BusBW. L3 threshold 391 GB/s.
 
 ## Level 4: Rollout Test
 

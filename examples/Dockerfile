@@ -9,13 +9,13 @@
 # while adding the AWS EFA stack that upstream doesn't include.
 #
 # The BUILD_TARGET arg selects which upstream image variant to build:
-#   - embodied-maniskill_libero  (ManiSkill + LIBERO, 6 model venvs)
+#   - embodied-maniskill_libero  (ManiSkill + LIBERO, 13 model venvs)
 #   - embodied-robotwin          (RoboTwin, 3 model venvs)
 #   - embodied-calvin            (CALVIN, 2 model venvs)
 #   - embodied-metaworld         (MetaWorld, 2 model venvs)
 #   - embodied-behavior-openvlaoft (BEHAVIOR, 1 model venv)
 #   - reason                     (Agentic RL, vLLM/SGLang)
-#   - ... (15 targets total, see upstream docker/Dockerfile)
+#   - ... (20 targets total, see upstream docker/Dockerfile)
 #
 # Build (from rlinf-on-eks repo root):
 #   docker build \
@@ -48,8 +48,10 @@ FROM rlinf-upstream-${BUILD_TARGET} AS upstream
 FROM rlinf-upstream-${BUILD_TARGET}
 
 ARG GDRCOPY_VERSION=v2.5.1
-ARG EFA_INSTALLER_VERSION=1.47.0
-ARG NCCL_VERSION=v2.21.5-1
+ARG EFA_INSTALLER_VERSION=1.50.0
+ARG NCCL_VERSION=v2.31.2-1
+# nccl-tests v2.21.0+ needs NCCL >= 2.32 (NCCL_WIN_GIN_ONLY); v2.20.0 builds against 2.31.2.
+ARG NCCL_TESTS_VERSION=v2.20.0
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -78,7 +80,8 @@ RUN apt-get install -y --no-install-recommends \
     tcl udev \
     && rm -rf /var/lib/apt/lists/*
 
-# Purge cuda-compat to avoid NCCL crashes with incompatible versions
+# Purge cuda-compat to avoid NCCL crashes when the image's compat libs do not
+# match the host driver. Still required on the CUDA 12.8.1 base (main@6f46f36a+).
 RUN apt-get purge -y cuda-compat-* 2>/dev/null || true
 
 # -- SSH config for MPI (required for MPIJob multi-node) --
@@ -106,15 +109,24 @@ RUN git clone -b ${GDRCOPY_VERSION} https://github.com/NVIDIA/gdrcopy.git /tmp/g
     rm -rf /tmp/gdrcopy
 
 # =============================================================================
-# EFA Installer 1.47.0
+# EFA Installer 1.50.0
 #
 # CRITICAL: Must use 1.47.0+ (not 1.34.0/1.38.0 which bundle old libfabric 1.22).
-# Installer 1.47.0 bundles:
-#   - libfabric 2.4.0amzn1.0 (RDMA + DMA-BUF support)
-#   - aws-ofi-nccl 1.18.0 (installed to /opt/amazon/ofi-nccl)
-#   - OpenMPI 4 and 5
+# Installer 1.50.0 bundles (https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-changelog.html):
+#   - libfabric 2.6.0amzn1.0 (RDMA + DMA-BUF support)
+#   - aws-ofi-nccl 1.21.1 (installed to /opt/amazon/ofi-nccl)
+#   - EFA driver 3.3.0 (kmod skipped here: --skip-kmod; the host provides it)
+#   - rdma-core 64.0
+#   - Open MPI 4.1.7 (/opt/amazon/openmpi -- the one on PATH/OPAL_PREFIX) and
+#     Open MPI 5.0.9 (/opt/amazon/openmpi5)
+# 1.50.0 drops Amazon Linux 2 support; irrelevant here (Ubuntu 22.04 image).
 #
 # No --minimal flag: we need the full install including aws-ofi-nccl.
+# --disable-ngc is REQUIRED: since 1.48.0 (not in 1.47.0) the installer auto-detects an
+# "NGC container" via /opt/nvidia/nvidia_entrypoint.sh, which the nvidia/cuda base
+# ships. In NGC mode it installs libnccl-ofi-ngc-v3 instead of libnccl-ofi, which
+# lacks libnccl-ofi-tuner.so (NCCL_TUNER_PLUGIN below) and the libnccl-net.so
+# symlink. -g is a documented no-op (GDR is on by default); -d installs debug pkgs.
 # The libevent-pthreads and libhwloc15 deps are installed above.
 # See AGENTS.md Discoveries #41-#45.
 # =============================================================================
@@ -122,7 +134,7 @@ RUN cd /tmp && \
     curl -O https://efa-installer.amazonaws.com/aws-efa-installer-${EFA_INSTALLER_VERSION}.tar.gz && \
     tar -xf aws-efa-installer-${EFA_INSTALLER_VERSION}.tar.gz && \
     cd aws-efa-installer && \
-    ./efa_installer.sh -y -g -d --skip-kmod --skip-limit-conf --no-verify && \
+    ./efa_installer.sh -y -g -d --skip-kmod --skip-limit-conf --no-verify --disable-ngc && \
     rm -rf /tmp/aws-efa-installer*
 
 # Verify aws-ofi-nccl was installed by the EFA installer
@@ -135,8 +147,12 @@ RUN echo "Verifying AWS OFI NCCL plugin installation..." && \
 # NCCL from source
 #
 # Build NCCL for target GPU architectures.
-# sm_80 (A100), sm_86 (A10G), sm_89 (L4/L40S), sm_90 (H100)
-# Note: sm_100 (B200) requires CUDA 12.8+; omit for CUDA 12.4 base.
+# sm_80 (A100), sm_86 (A10G), sm_89 (L4/L40S), sm_90 (H100/H200), sm_100 (B200)
+# Upstream RLinf base is CUDA 12.8.1 (since main@6f46f36a), which supports sm_100.
+# NCCL v2.31.2-1 is the version aws-ofi-nccl 1.21.1 (EFA installer 1.50.0) is
+# tested with (https://github.com/aws/aws-ofi-nccl/releases/tag/v1.21.1).
+# Known issue: NCCL 2.31.2 PAT+NVLS regresses on H100. PAT is off by default; do
+# not set NCCL_ALGO=PAT.
 # =============================================================================
 RUN git clone -b ${NCCL_VERSION} https://github.com/NVIDIA/nccl.git /opt/nccl && \
     cd /opt/nccl && \
@@ -144,7 +160,16 @@ RUN git clone -b ${NCCL_VERSION} https://github.com/NVIDIA/nccl.git /opt/nccl &&
     NVCC_GENCODE="-gencode=arch=compute_80,code=sm_80 \
                   -gencode=arch=compute_86,code=sm_86 \
                   -gencode=arch=compute_89,code=sm_89 \
-                  -gencode=arch=compute_90,code=sm_90"
+                  -gencode=arch=compute_90,code=sm_90 \
+                  -gencode=arch=compute_100,code=sm_100"
+
+# nccl-tests built against OUR NCCL + Amazon OpenMPI, so L3 measures this image's
+# exact NCCL/aws-ofi-nccl/EFA stack (not a third-party image).
+# MPI_HOME=/opt/amazon/openmpi (Open MPI 4.1.7) matches PATH and OPAL_PREFIX.
+RUN git clone -b ${NCCL_TESTS_VERSION} --depth 1 https://github.com/NVIDIA/nccl-tests.git /opt/nccl-tests && \
+    cd /opt/nccl-tests && \
+    make -j $(nproc) MPI=1 MPI_HOME=/opt/amazon/openmpi CUDA_HOME=/usr/local/cuda NCCL_HOME=/opt/nccl/build \
+    NVCC_GENCODE="-gencode=arch=compute_90,code=sm_90 -gencode=arch=compute_100,code=sm_100 -gencode=arch=compute_80,code=sm_80 -gencode=arch=compute_86,code=sm_86 -gencode=arch=compute_89,code=sm_89"
 
 # -- OpenMPI tuning --
 ENV OMPI_MCA_pml=^ucx \
@@ -189,9 +214,9 @@ COPY examples/scripts/ /workspace/eks/scripts/
 #   rlinf       - RLinf source (required for all training examples)
 #
 # DreamZero note: the DreamZero `groot` package is provided by the
-# COPY DreamZero/ tree on PYTHONPATH (DREAMZERO_PATH). Its `dreamzero` venv is
-# installed by the overlay below when the base BUILD_TARGET does not already
-# ship it (see the "Unified image" RUN), so a single image serves every example.
+# COPY DreamZero/ tree on PYTHONPATH (DREAMZERO_PATH). Its `dreamzero` venv ships
+# in upstream's embodied-maniskill_libero target; the build fails (guard below)
+# for a BUILD_TARGET that lacks it, so a single image serves every example.
 #
 # Examples:
 #   --build-arg EXTRAS=rlinf                  (ManiSkill, LIBERO, pi0, DreamZero)
@@ -205,42 +230,9 @@ ARG EXTRAS="rlinf"
 COPY RLinf/ /workspace/RLinf/
 COPY DreamZero/ /workspace/DreamZero/
 
-# Apply EKS hotfix patches to the upstream RLinf source.
-# dcp-save-gloo-coordinator.patch: pass a CPU/gloo process group to dcp.save so
-# its post-write finalization object-broadcast runs over gloo instead of CUDA/NCCL.
-# On torch 2.6 the default-PG (NCCL) broadcast of the multi-MB finalization object
-# races with NCCL comm teardown at the end of a long (100s+ GB) checkpoint write,
-# leaving non-coordinator ranks with an all-zero buffer -> UnpicklingError, AFTER
-# every shard + .metadata are already on disk (reproduced + validated on 2x p5en;
-# torch 2.7+ fixes this upstream the same way). Must be baked into the image because
-# Ray worker actors on every node import from /workspace/RLinf. git is present
-# (installed in the EFA stage). Patches are validated to apply against the pinned
-# UPSTREAM_REF; the build fails loudly if a patch no longer applies.
-RUN cd /workspace/RLinf && \
-    for p in /workspace/eks/scripts/patches/*.patch; do [ -e "$p" ] || continue; \
-        echo "Applying patch: ${p}"; \
-        git apply --verbose "${p}" || patch -p1 < "${p}"; \
-    done
-
-# Unified image: ensure the `dreamzero` venv is present regardless of BUILD_TARGET.
-#
-# We build ONE image serving all examples. The `embodied-maniskill_libero` base
-# ships the PPO venvs (openvla, openvla-oft, openpi, gr00t, ...) plus ManiSkill
-# and openpi assets, but NOT the `dreamzero` venv; the `embodied-libero` base
-# ships `dreamzero` but not openpi/ManiSkill. To serve DreamZero *and* the PPO
-# examples from a single :latest tag, we install the `dreamzero` venv here if the
-# base target did not already provide it. venvs are isolated `uv` environments
-# (${UV_PATH}/<name>), so adding one never perturbs the others -- this is the
-# same multi-venv pattern upstream uses, not a same-venv dependency layering
-# (which is what hits the lerobot/torchcodec resolve conflict).
-RUN if [ ! -d "${UV_PATH}/dreamzero" ]; then \
-        echo "Installing dreamzero venv overlay (base target lacked it)..."; \
-        cd "${UV_PATH}" && \
-        bash requirements/install.sh --platform "${RLINF_PLATFORM}" embodied \
-            --venv dreamzero --model dreamzero --env libero; \
-    else \
-        echo "dreamzero venv already present in base image; skipping overlay."; \
-    fi
+# DreamZero runs in the `dreamzero` venv, which upstream's embodied-maniskill_libero
+# target ships. Fail fast if a different BUILD_TARGET lacks it.
+RUN test -d "${UV_PATH}/dreamzero" || { echo "ERROR: BUILD_TARGET lacks the dreamzero venv; use embodied-maniskill_libero"; exit 1; }
 
 # Wan world-model example deps overlay.
 # The wan-openvlaoft-grpo example runs in the `openvla-oft` venv (switch_env

@@ -34,11 +34,12 @@ With EFA:
 | 1.34.0 | 1.22.0amzn4.0 | NOT bundled | **BROKEN** -- crashes |
 | 1.38.0 | 1.22.0amzn4.0 | NOT bundled | **BROKEN** -- crashes |
 | 1.43.0 | 2.1.0amzn4.0 | 1.16.1 bundled | Likely works |
-| **1.47.0** | **2.4.0amzn1.0** | **1.18.0 bundled** | **USE THIS** |
+| 1.47.0 | 2.4.0amzn1.0 | 1.18.0 bundled | Works (previous image; host bootstrap still uses it) |
+| **1.50.0** | **2.6.0amzn1.0** | **1.21.1 bundled** | **USE THIS** (with `--disable-ngc`) |
 
-**Always use EFA installer 1.47.0 or newer.** It bundles everything needed:
-- libfabric 2.4.0amzn1.0 (RDMA + DMA-BUF support)
-- aws-ofi-nccl 1.18.0 (installed to `/opt/amazon/ofi-nccl`)
+**Use EFA installer 1.50.0 in the container (never older than 1.47.0).** It bundles everything needed:
+- libfabric 2.6.0amzn1.0 (RDMA + DMA-BUF support)
+- aws-ofi-nccl 1.21.1 (installed to `/opt/amazon/ofi-nccl`), tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either
 - OpenMPI 4 and 5
 - No need to build aws-ofi-nccl from source.
 
@@ -75,7 +76,7 @@ Node 1 (p5.48xlarge)              Node 2 (p5.48xlarge)
 
 The cheapest EFA+GPU instance is `g6.8xlarge` at ~$0.98/hr (1 L4 GPU, 1 EFA interface). Run the NCCL test on 2x g6.8xlarge (~$2/hr) to validate:
 
-1. EFA provider is selected (`NET/OFI Selected Provider is efa`)
+1. EFA provider is selected (`NET/OFI Selected provider is efa`; aws-ofi-nccl releases before 1.21 log `Selected Provider is efa`)
 2. NCCL allreduce completes without crashes
 3. Bandwidth is reasonable for the instance type
 
@@ -186,7 +187,7 @@ spec:
 
 ### 5. NCCL Environment Variables
 
-With EFA installer 1.47.0+, only minimal env vars are needed:
+With EFA installer 1.47.0+ (image uses 1.50.0), only minimal env vars are needed:
 
 ```bash
 # Required
@@ -218,11 +219,13 @@ RUN git clone -b v2.5.1 https://github.com/NVIDIA/gdrcopy.git /tmp/gdrcopy \
     && cd /tmp/gdrcopy \
     && make prefix=/opt/gdrcopy install
 
-# EFA Installer 1.47.0 (bundles libfabric 2.4.0 + aws-ofi-nccl 1.18.0)
-RUN curl -sL https://efa-installer.amazonaws.com/aws-efa-installer-1.47.0.tar.gz -o /tmp/efa.tar.gz \
+# EFA Installer 1.50.0 (bundles libfabric 2.6.0amzn1.0 + aws-ofi-nccl 1.21.1)
+# --disable-ngc: nvidia/cuda bases ship /opt/nvidia/nvidia_entrypoint.sh, which
+# triggers NGC mode (libnccl-ofi-ngc-v3, no libnccl-ofi-tuner.so)
+RUN curl -sL https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.tar.gz -o /tmp/efa.tar.gz \
     && tar xzf /tmp/efa.tar.gz -C /tmp \
     && cd /tmp/aws-efa-installer \
-    && ./efa_installer.sh -y -g -d --skip-kmod --skip-limit-conf --no-verify \
+    && ./efa_installer.sh -y -g -d --skip-kmod --skip-limit-conf --no-verify --disable-ngc \
     && rm -rf /tmp/aws-efa-installer /tmp/efa.tar.gz
 
 ENV LD_LIBRARY_PATH="/opt/gdrcopy/lib:/opt/amazon/ofi-nccl/lib:/opt/amazon/efa/lib:${LD_LIBRARY_PATH}"
@@ -259,7 +262,9 @@ spec:
 
 > **Discovery #46**: The canonical NCCL test on EKS uses an MPIJob (Kubeflow MPI Operator), NOT a StatefulSet with torchrun. The MPIJob has a Launcher pod (runs mpirun) and Worker pods (run sshd).
 
-See `infrastructure/manifests/nccl-tests-mpijob.yaml` for the NCCL test setup (uses pre-built public ECR image, no custom build needed).
+Two manifests:
+- `infrastructure/manifests/nccl-allreduce-fullnode.yaml` -- the L3 gate on p5en.48xlarge. Runs `all_reduce_perf` (built into the training image, v2.20.0 against NCCL v2.31.2-1) across 2 workers x 8 GPU x 16 EFA, 8 B-16 GiB; workers start their own sshd.
+- `infrastructure/manifests/nccl-tests-mpijob.yaml` -- quick smoke test (pre-built public ECR image, 1 GPU + 1 EFA per node).
 
 Expected NCCL performance (2x p5.48xlarge, 16 GPUs):
 
@@ -270,15 +275,18 @@ Expected NCCL performance (2x p5.48xlarge, 16 GPUs):
 | 1 GB        | ~437 GB/s   |
 | 16 GB       | ~487 GB/s   |
 
+Measured full-node (2x p5en.48xlarge, our image, EFA 1.50.0 / aws-ofi-nccl 1.21.1 / NCCL v2.31.2-1, 2026-10, two runs): 1 GiB ~444, 4 GiB ~465, 8 GiB ~480, **16 GiB 489.50 / 489.65 GB/s** busbw. The `Avg bus bandwidth` line (~134.8) averages the whole 8 B-16 GiB sweep and is dominated by small sizes; L3 gates on the 16 GiB row: 391 GB/s (80%), override with `L3_P5EN_THRESHOLD`.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `NET/IB : No device found` + fallback to `NET/Socket` | Container missing aws-ofi-nccl | Install EFA installer 1.47.0 in Dockerfile |
-| `cm_req_handle_error_entry: Error: 15` crash | Old libfabric (1.22.x) | Upgrade to EFA installer 1.47.0+ |
+| `NET/IB : No device found` + fallback to `NET/Socket` | Container missing aws-ofi-nccl | Install EFA installer 1.50.0 (with `--disable-ngc`) in Dockerfile |
+| `cm_req_handle_error_entry: Error: 15` crash | Old libfabric (1.22.x) | Upgrade to EFA installer 1.47.0+ (image: 1.50.0) |
 | `Caught signal 11` during NCCL warmup | Missing efa_nv_peermem module | Load module via DaemonSet |
 | `NET/OFI Support for DMA-BUF registrations: false` | AL2 kernel 5.10 too old | Switch to AL2023 AMI (`AL2023_x86_64_NVIDIA`) |
-| ~3 GB/s BusBW on p5.48xlarge | Falling back to TCP sockets | Verify `NET/OFI Selected Provider is efa` in NCCL_DEBUG=INFO |
+| ~3 GB/s BusBW on p5.48xlarge | Falling back to TCP sockets | Verify `Selected Provider is efa` in NCCL_DEBUG=INFO (aws-ofi-nccl 1.21 logs lowercase `provider`) |
+| `libnccl-ofi-tuner.so` missing after installer >= 1.48 | NGC auto-detect installed `libnccl-ofi-ngc-v3` | Add `--disable-ngc` to `efa_installer.sh` |
 | `No EFA devices found` | EFA not enabled on node group | Verify `enable_efa_support = true` in Terraform |
 | `fi_info` shows no EFA | EFA device plugin not running | Check `aws-efa-k8s-device-plugin` daemonset |
 | Training hangs on init | Security group blocking EFA | Verify BOTH ingress AND egress self-referencing SG rules exist (CIDR egress is NOT enough for SRD) |

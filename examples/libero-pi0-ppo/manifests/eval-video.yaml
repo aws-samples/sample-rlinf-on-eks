@@ -91,21 +91,36 @@ spec:
               # LIBERO records every simulator step (regardless of action chunking),
               # so max_steps_per_rollout_epoch=240 gives one full episode per env.
               # Note: LIBERO config doesn't support env.eval.enable_offload (not in struct).
-              # actor.micro_batch_size=32 needed to satisfy batch size assertion on 8 GPUs.
-              python3 examples/embodiment/eval_embodied_agent.py \
-                --config-path config \
+              #
+              # Entrypoint: upstream evaluations/eval_embodied_agent.py (the old
+              # examples/embodiment/eval_embodied_agent.py was removed upstream in 2e1c99f7).
+              # It forces runner.task_type=embodied_eval and builds ONLY rollout + env
+              # workers from cfg.rollout.model / cfg.env.eval (no actor). Hydra's
+              # config_path is relative to evaluations/, so --config-path must be absolute.
+              # We keep the TRAINING config so model/env settings match training exactly:
+              #   'rollout.model=${actor.model}'  → the training config's rollout.model is a
+              #     stub (path+precision); embodied_eval requires a full spec (model_type,
+              #     num_action_chunks, openpi.config_name/task, num_steps). Hydra
+              #     interpolation (single-quoted for bash; envsubst leaves it alone) makes
+              #     rollout.model the exact training architecture (openpi.task=rl, value head),
+              #     which runner.ckpt_path is strict-loaded into. Pi0RL supports mode=eval.
+              #   actor.model.model_path → rollout.model mirrors it via the interpolation.
+              #   actor.micro_batch_size override dropped: embodied_eval returns from
+              #     validate_cfg before the FSDP batch-size assertion.
+              #   env.eval.rollout_epoch=1  → replaces deprecated algorithm.eval_rollout_epoch
+              python3 evaluations/eval_embodied_agent.py \
+                --config-path /workspace/RLinf/examples/embodiment/config \
                 --config-name libero_spatial_ppo_openpi_quickstart \
                 runner.logger.log_path=/fsx/checkpoints/libero-pi0-eval-video \
                 runner.ckpt_path=${CKPT_PATH} \
+                'rollout.model=${actor.model}' \
                 actor.model.model_path=/fsx/models/rlinf-pi0-sft-spatial \
-                actor.micro_batch_size=32 \
-                rollout.model.model_path=/fsx/models/rlinf-pi0-sft-spatial \
                 rollout.pipeline_stage_num=1 \
                 rollout.enable_offload=True \
                 env.eval.total_num_envs=8 \
                 env.eval.max_steps_per_rollout_epoch=240 \
                 env.eval.video_cfg.save_video=True \
-                algorithm.eval_rollout_epoch=1 \
+                env.eval.rollout_epoch=1 \
                 cluster.num_nodes=1
 
               echo "=== Eval complete. Videos at /fsx/checkpoints/libero-pi0-eval-video/video/ ==="

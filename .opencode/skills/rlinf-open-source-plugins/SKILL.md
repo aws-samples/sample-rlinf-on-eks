@@ -109,7 +109,7 @@ RLinf includes VLA-specific components built on its flow transformation architec
 
 ### RLinf Installation
 
-RLinf v0.3 is installed in the container image (see Skill 07):
+RLinf main@d844e648 (post-v0.4, pinned via `UPSTREAM_REF` in `examples/buildspec.yml`) is installed in the container image (see Skill 07):
 
 ```bash
 git clone https://github.com/RLinf/RLinf.git

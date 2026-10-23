@@ -22,7 +22,10 @@ resource "kubernetes_manifest" "gpu_nodepool" {
       template = {
         metadata = {
           labels = {
+            # Both labels are set: manifests/tests select role=gpu-training;
+            # container-test.yaml selects node-role=gpu-training.
             "node-role" = "gpu-training"
+            "role"      = "gpu-training"
           }
         }
         spec = {

@@ -27,7 +27,7 @@ metadata:
     example: ${EXAMPLE_NAME}
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 900
+  activeDeadlineSeconds: 1200  # matches cluster.sh L5 wait (pi0 ~13 min wall)
   template:
     metadata:
       labels:
@@ -92,18 +92,26 @@ spec:
                 exit 1
               fi
 
-              # Run 1 training step
-              cd /workspace
+              # Run 1 training step.
+              # Upstream RLinf lives at /workspace/RLinf in the image. Hydra resolves
+              # --config-path relative to the script dir (examples/embodiment/), so
+              # pass "config". Configs use ${oc.env:EMBODIED_PATH} for searchpaths.
+              cd /workspace/RLinf
+              export EMBODIED_PATH=/workspace/RLinf/examples/embodiment
               echo "=== Starting 1-step training ==="
+              # EXTRA_OVERRIDES: per-example extras (e.g. OFT LoRA path); word-split on purpose.
+              # shellcheck disable=SC2086
               python3 examples/embodiment/train_embodied_agent.py \
-                --config-path examples/embodiment/config/ \
+                --config-path config \
                 --config-name "${CONFIG_NAME}" \
                 runner.max_steps=1 \
                 runner.save_interval=-1 \
                 runner.val_check_interval=-1 \
                 actor.model.model_path="${MODEL_PATH}" \
                 rollout.model.model_path="${MODEL_PATH}" \
-                cluster.num_nodes=1
+                runner.logger.log_path=/fsx/checkpoints/training-step-test \
+                cluster.num_nodes=1 \
+                ${EXTRA_OVERRIDES}
 
               echo ""
               echo "============================================"
@@ -118,6 +126,19 @@ spec:
               value: "${CONFIG_NAME}"
             - name: MODEL_PATH
               value: "${MODEL_PATH}"
+            - name: EXTRA_OVERRIDES
+              value: "${EXTRA_OVERRIDES}"
+            # ManiSkill tasks read assets from MANISKILL_ASSET_DIR (default is the
+            # in-tree rlinf/envs/sim/maniskill/assets, which the image does not ship).
+            - name: MANISKILL_ASSET_DIR
+              value: "/fsx/assets/maniskill"
+            # LIBERO_DATASET_DIR: LIBERO dataset/config location (pi0). ROBOT_PLATFORM:
+            # kept per examples/AGENTS.md for the LIBERO PPO examples; at c70606f0 only
+            # starvla's action_space.py reads it, so it is inert for both L5 examples.
+            - name: LIBERO_DATASET_DIR
+              value: "/fsx/datasets/libero"
+            - name: ROBOT_PLATFORM
+              value: "LIBERO"
             - name: NVIDIA_DRIVER_CAPABILITIES
               value: "all"
             - name: MLFLOW_TRACKING_URI

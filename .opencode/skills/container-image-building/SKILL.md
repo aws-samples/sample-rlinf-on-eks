@@ -31,9 +31,9 @@ Build a container image that contains the full software stack for RL training: P
 
 > **Two-Stage Build Strategy**: The correct approach is a two-stage build: (1) Build the upstream framework image from `<upstream-repo>/docker/Dockerfile` with the appropriate `BUILD_TARGET`, which handles multiple build targets with complex dependency management. (2) Layer EFA/NCCL/GDRCopy on top with the thin `examples/Dockerfile`. This preserves ALL upstream dependency management while adding EFA networking support.
 >
-> **Example (RLinf):** The RLinf reference uses `RLinf/docker/Dockerfile` with 15 build targets and `uv` (not pip/conda) for package management with per-model venvs (openvla, openvla-oft, openpi, gr00t, dexbotic). See `rlinf-pytorch-training-scripts` skill for details.
+> **Example (RLinf):** The RLinf reference uses `RLinf/docker/Dockerfile` with 20 build targets (reason + 19 embodied) and `uv` (not pip/conda) for package management with per-model venvs (13 in `embodied-maniskill_libero` at main@d844e648: openvla, openvla-oft, openpi, gr00t, dexbotic, dreamzero, ...). Stage-1 fixes for upstream build breaks go in `examples/scripts/upstream-build-patches/*.patch` (applied by buildspec pre_build; line-anchored, so re-check them on every `UPSTREAM_REF` bump; none are needed at main@d844e648). See `rlinf-pytorch-training-scripts` skill for details.
 >
-> **The vanilla `nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04` base IS compatible with the EFA installer** -- only the NGC PyTorch image (with HPC-X) causes conflicts. The public NCCL test image (`public.ecr.aws/hpc-cloud/nccl-tests`) proves EFA works on plain CUDA devel images.
+> **The vanilla `nvidia/cuda` cudnn-devel base (CUDA 12.8.1 upstream at main@d844e648) IS compatible with the EFA installer** -- only the NGC PyTorch image (with HPC-X) causes conflicts. The public NCCL test image (`public.ecr.aws/hpc-cloud/nccl-tests`) proves EFA works on plain CUDA devel images.
 
 ## Dockerfile
 
@@ -51,12 +51,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     environment-modules tcl udev libevent-pthreads-2.1-7 libhwloc15 \
     && rm -rf /var/lib/apt/lists/*
 
-# EFA installer 1.47.0 (bundles libfabric 2.4.0 + aws-ofi-nccl 1.18.0)
+# EFA installer 1.50.0 (bundles libfabric 2.6.0amzn1.0 + aws-ofi-nccl 1.21.1)
 # DO NOT use --minimal flag -- it skips aws-ofi-nccl installation
-RUN curl -sO https://efa-installer.amazonaws.com/aws-efa-installer-1.47.0.tar.gz \
-    && tar -xf aws-efa-installer-1.47.0.tar.gz \
+# --disable-ngc is REQUIRED on nvidia/cuda bases (see below)
+RUN curl -sO https://efa-installer.amazonaws.com/aws-efa-installer-1.50.0.tar.gz \
+    && tar -xf aws-efa-installer-1.50.0.tar.gz \
     && cd aws-efa-installer \
-    && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify \
+    && ./efa_installer.sh -y --skip-kmod --skip-limit-conf --no-verify --disable-ngc \
     && cd .. && rm -rf aws-efa-installer*
 
 # EFA environment
@@ -71,7 +72,9 @@ RUN chmod +x /workspace/eks/scripts/*.sh
 
 ## EFA Stack Installation (Stage 2)
 
-> The EFA stack is installed in Stage 2 of the two-stage build. The upstream framework image uses a plain `nvidia/cuda` base which is compatible with the EFA installer. Key packages installed: EFA installer 1.47.0 (bundles libfabric 2.4.0, aws-ofi-nccl 1.18.0, OpenMPI), plus prerequisites (`environment-modules`, `tcl`, `udev`, `libevent-pthreads-2.1-7`, `libhwloc15`).
+> The EFA stack is installed in Stage 2 of the two-stage build. The upstream framework image uses a plain `nvidia/cuda` base which is compatible with the EFA installer. Key packages installed: EFA installer 1.50.0 (bundles libfabric 2.6.0amzn1.0, aws-ofi-nccl 1.21.1, OpenMPI 4 + 5), plus prerequisites (`environment-modules`, `tcl`, `udev`, `libevent-pthreads-2.1-7`, `libhwloc15`). Stage 2 also source-builds NCCL v2.31.2-1 and nccl-tests v2.20.0 (v2.21.0 needs NCCL >= 2.32).
+>
+> **`--disable-ngc` is required with installer >= 1.48.0 on an `nvidia/cuda` base**: the installer treats any image with `/opt/nvidia/nvidia_entrypoint.sh` as an NGC container and installs `libnccl-ofi-ngc-v3`, which lacks `libnccl-ofi-tuner.so` (the `NCCL_TUNER_PLUGIN` target).
 >
 > **DO NOT use `--minimal` flag** on `efa_installer.sh` -- it skips aws-ofi-nccl installation. The aws-ofi-nccl library installs to `/opt/amazon/ofi-nccl/lib/` (not under `x86_64-linux-gnu/` or `lib64/`).
 
@@ -154,12 +157,14 @@ COPY <upstream-repo>/ /workspace/<upstream-repo>/
 # Apply patches if needed
 COPY examples/patches/ /tmp/patches/
 RUN cd /workspace/<upstream-repo> && \
-    for p in /tmp/patches/*.patch; do \
-        echo "Applying: $p" && git apply "$p" || patch -p1 < "$p"; \
+    for p in /tmp/patches/*.patch; do [ -e "$p" ] || continue; \
+        echo "Applying: $p"; git apply --verbose "$p" || exit 1; \
     done && rm -rf /tmp/patches
 ```
 
 Patches should be minimal, well-documented, and stored in version control. When the upstream repo updates, rebase the patches.
+
+> **This repo (RLinf):** the only patch mechanism is stage 1: `examples/scripts/upstream-build-patches/*.patch`, applied to the upstream clone by `examples/buildspec.yml` pre_build (currently empty: the dexbotic hub cap was dropped at main@d844e648 because upstream now pins `transformers==4.53.2` there). The stage-2 (Dockerfile) runtime patch loop over `examples/scripts/patches/` was removed (2026-10) because it was empty; reintroduce it only together with a real patch.
 
 ## Build Process
 

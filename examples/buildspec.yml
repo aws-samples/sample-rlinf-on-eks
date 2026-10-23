@@ -27,7 +27,7 @@ env:
   variables:
     ECR_REPO: "rlinf-on-eks/rlinf"
     UPSTREAM_REPO: "https://github.com/RLinf/RLinf.git"
-    UPSTREAM_REF: "0505431899574619da86f551bad70b71e0ea2177"  # RLinf v0.3 tag
+    UPSTREAM_REF: "d844e6485d9c00da497b1e1980996fe36da6fb1c"  # RLinf main 2026-10-22 (post-v0.4; torch 2.11, CUDA 12.8)
     BUILD_TARGET: "embodied-maniskill_libero"
     EXTRAS: "rlinf"
     DREAMZERO_REPO: "https://github.com/RLinf/dreamzero.git"
@@ -47,6 +47,8 @@ phases:
       - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
       - "echo Cloning upstream RLinf at ref $UPSTREAM_REF..."
       - "git clone $UPSTREAM_REPO RLinf && git -C RLinf checkout $UPSTREAM_REF"
+      # Stage-1 (upstream install.sh) build fixes; fail loudly if one no longer applies.
+      - "for p in examples/scripts/upstream-build-patches/*.patch; do [ -e \"$p\" ] || continue; echo Applying upstream build patch $p; git -C RLinf apply --verbose \"$PWD/$p\" || exit 1; done"
       # Clone DreamZero (groot) package repo
       - "echo Cloning DreamZero groot package at ref $DREAMZERO_REF"
       - "git clone $DREAMZERO_REPO DreamZero && git -C DreamZero checkout $DREAMZERO_REF"

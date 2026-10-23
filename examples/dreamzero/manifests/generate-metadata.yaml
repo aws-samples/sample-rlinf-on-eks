@@ -4,7 +4,7 @@
 # Generate LIBERO Normalization Metadata for DreamZero SFT
 #
 # Produces /fsx/models/metadata-libero.json with normalization statistics for
-# embodiment `libero_sim`, used by the DreamZero LIBERO 14B SFT job.
+# embodiment `libero_sim`, used by the DreamZero LIBERO 14B SFT and eval jobs.
 #
 # WHY THIS IS NEEDED:
 #   DreamZero LIBERO SFT warm-starts from the DreamZero-DROID checkpoint, which
@@ -12,8 +12,9 @@
 #   with embodiment_tag `libero_sim` fails with:
 #     KeyError: "embodiment_tag 'libero_sim' not found in
 #       /fsx/models/DreamZero-DROID/experiment_cfg/metadata.json (keys: ['oxe_droid'])."
-#   This Job generates LIBERO-specific stats via upstream's toolkit so the SFT
-#   launcher can point actor.model.metadata_json_path at them.
+#   This Job generates LIBERO-specific stats via upstream's toolkit so the
+#   launchers can point at them: SFT via +actor.model.metadata_json_path, eval
+#   via rollout.model.metadata_json_path (in-struct, no '+').
 #
 # WHY THE TRAINING IMAGE (not python:3.11-slim):
 #   Metadata generation requires the RLinf repo's toolkit

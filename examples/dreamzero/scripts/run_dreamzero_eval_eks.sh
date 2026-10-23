@@ -5,7 +5,7 @@
 # =============================================================================
 # DreamZero LIBERO simulator eval launcher (single-node, GPU).
 #
-# Runs upstream examples/embodiment/eval_embodied_agent.py against a trained
+# Runs upstream evaluations/eval_embodied_agent.py against a trained
 # DreamZero checkpoint (full_weights.pt) in the LIBERO Spatial simulator,
 # reporting success_once and (optionally) saving in-sim rollout videos.
 #
@@ -52,21 +52,23 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-osmesa}"
 
 cd /workspace/RLinf
 
-# --- Stage the 14B eval config into the embodiment config dir ---
-# eval_embodied_agent.py runs with `--config-path config`, i.e.
-# /workspace/RLinf/examples/embodiment/config/. Upstream only ships a 5B eval
-# config there; our 14B variant is mounted (via the dreamzero-eval-config
-# ConfigMap) at /opt/eval-config/ and copied into the embodiment config dir here.
-# We copy a single file (NOT mount a ConfigMap over the dir) so the upstream
-# config groups (env/, model/, training_backend/, weight_syncer/) remain visible.
+# --- Stage the 14B eval config into the eval entrypoint's config dir ---
+# evaluations/eval_embodied_agent.py (hydra config_path="libero", resolved
+# relative to the script) reads configs from /workspace/RLinf/evaluations/libero/.
+# Upstream only ships a 5B DreamZero eval config there. Our 14B variant is
+# mounted (via the dreamzero-eval-config ConfigMap) at /opt/eval-config/ and
+# copied in here. We copy a single file (NOT mount a ConfigMap over the dir) so
+# the upstream eval configs stay visible. The env/ groups resolve via
+# EMBODIED_PATH, and model/dreamzero_14b via the SFT config dir (both on the
+# config's hydra.searchpath).
 EVAL_CONFIG_SRC="${EVAL_CONFIG_SRC:-/opt/eval-config}"
-EMBODIED_CONFIG_DIR="/workspace/RLinf/examples/embodiment/config"
+EVAL_CONFIG_DIR="/workspace/RLinf/evaluations/libero"
 if [ -f "${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml" ]; then
-    echo "Staging eval config: ${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml -> ${EMBODIED_CONFIG_DIR}/"
-    cp "${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml" "${EMBODIED_CONFIG_DIR}/${CONFIG_NAME}.yaml"
+    echo "Staging eval config: ${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml -> ${EVAL_CONFIG_DIR}/"
+    cp "${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml" "${EVAL_CONFIG_DIR}/${CONFIG_NAME}.yaml"
 else
     echo "No mounted eval config at ${EVAL_CONFIG_SRC}/${CONFIG_NAME}.yaml;"
-    echo "expecting ${EMBODIED_CONFIG_DIR}/${CONFIG_NAME}.yaml to already exist."
+    echo "expecting ${EVAL_CONFIG_DIR}/${CONFIG_NAME}.yaml to already exist."
 fi
 
 if [ ! -f "${CKPT_PT}" ]; then
@@ -79,18 +81,22 @@ mkdir -p "${LOG_DIR}"
 HYDRA_ARGS="runner.only_eval=True"
 HYDRA_ARGS="${HYDRA_ARGS} runner.ckpt_path=${CKPT_PT}"
 HYDRA_ARGS="${HYDRA_ARGS} runner.logger.log_path=${LOG_DIR}"
-HYDRA_ARGS="${HYDRA_ARGS} actor.model.tokenizer_path=${TOKENIZER_PATH}"
-HYDRA_ARGS="${HYDRA_ARGS} actor.model.model_path=${MODEL_PATH}"
-# metadata_json_path is commented out in the config struct -> add with '+'.
-HYDRA_ARGS="${HYDRA_ARGS} +actor.model.metadata_json_path=${METADATA_PATH}"
+# The eval entrypoint builds only rollout + env workers; the policy is rollout.model.
+HYDRA_ARGS="${HYDRA_ARGS} rollout.model.tokenizer_path=${TOKENIZER_PATH}"
+HYDRA_ARGS="${HYDRA_ARGS} rollout.model.model_path=${MODEL_PATH}"
+# metadata_json_path is defined in the eval config struct -> plain override (no '+').
+HYDRA_ARGS="${HYDRA_ARGS} rollout.model.metadata_json_path=${METADATA_PATH}"
 HYDRA_ARGS="${HYDRA_ARGS} env.eval.video_cfg.save_video=${SAVE_VIDEO}"
 if [ -n "${HYDRA_OVERRIDES:-}" ]; then
     HYDRA_ARGS="${HYDRA_ARGS} ${HYDRA_OVERRIDES}"
 fi
 
 echo "Eval Hydra args: ${HYDRA_ARGS}"
+# Absolute --config-path: hydra resolves a relative one against the script dir
+# (evaluations/), so "evaluations/libero" would NOT resolve. An absolute path is
+# unambiguous.
 # shellcheck disable=SC2086
-python3 examples/embodiment/eval_embodied_agent.py \
-    --config-path config \
+python3 evaluations/eval_embodied_agent.py \
+    --config-path "${EVAL_CONFIG_DIR}" \
     --config-name "${CONFIG_NAME}" \
     ${HYDRA_ARGS}

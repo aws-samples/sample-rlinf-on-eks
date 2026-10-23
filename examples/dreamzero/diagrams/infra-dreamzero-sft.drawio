@@ -25,7 +25,7 @@
         <mxCell id="n0ray" parent="node0" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="entrypoint launcher&#xa;run_dreamzero_sft_eks.sh&#xa;(Ray-agnostic; config&#xa;libero_sft_dreamzero_14b)" vertex="1">
           <mxGeometry height="68" width="170" x="210" y="36" as="geometry" />
         </mxCell>
-        <mxCell id="n0efa" parent="node0" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="16x EFA  (libfabric 2.4 / aws-ofi-nccl 1.18)" vertex="1">
+        <mxCell id="n0efa" parent="node0" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="16x EFA  (libfabric 2.6 / aws-ofi-nccl 1.21.1)" vertex="1">
           <mxGeometry height="44" width="360" x="20" y="115" as="geometry" />
         </mxCell>
         <mxCell id="efaedge" edge="1" parent="node0" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=3;fontSize=11;labelBackgroundColor=none;fontColor=default;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="NCCL all-gather/reduce-scatter over EFA GDRDMA — RLinf Cluster (Ray) scheduler fans FSDP2 across 16 GPUs">
@@ -44,7 +44,7 @@
         <mxCell id="n1ray" parent="node1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="ray-worker joins the&#xa;head&#39;s RayCluster&#xa;(KubeRay-managed;&#xa;no manual head election)" vertex="1">
           <mxGeometry height="68" width="170" x="210" y="36" as="geometry" />
         </mxCell>
-        <mxCell id="n1efa" parent="node1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="16x EFA  (libfabric 2.4 / aws-ofi-nccl 1.18)" vertex="1">
+        <mxCell id="n1efa" parent="node1" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="16x EFA  (libfabric 2.6 / aws-ofi-nccl 1.21.1)" vertex="1">
           <mxGeometry height="44" width="360" x="20" y="115" as="geometry" />
         </mxCell>
         <mxCell id="opedge" edge="1" parent="eks" source="operator" style="endArrow=classic;html=1;strokeWidth=2;dashed=1;fontSize=10;labelBackgroundColor=none;fontColor=default;rounded=0;sketch=1;curveFitting=1;jiggle=2;" target="sts" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;creates RayCluster + runs entrypoint&lt;/span&gt;">
@@ -75,7 +75,7 @@
         <mxCell id="pipe" parent="1" style="swimlane;startSize=30;html=1;fontStyle=1;verticalAlign=top;labelBackgroundColor=none;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="Pipeline (each stage = one manifest)" vertex="1">
           <mxGeometry height="463" width="390" x="970" y="70" as="geometry" />
         </mxCell>
-        <mxCell id="p1" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="1. Build + push image to ECR&#xa;unified image (embodied-maniskill_libero + dreamzero venv)" vertex="1">
+        <mxCell id="p1" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="1. Build + push image to ECR&#xa;unified image (embodied-maniskill_libero, 13 venvs)" vertex="1">
           <mxGeometry height="50" width="330" x="30" y="45" as="geometry" />
         </mxCell>
         <mxCell id="p2" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="2. Stage + metadata&#xa;model-download.yaml + generate-metadata.yaml" vertex="1">
@@ -87,7 +87,7 @@
         <mxCell id="p4" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="4. Convert  (CPU Job)&#xa;convert-checkpoint.yaml - DCP to full_weights.pt" vertex="1">
           <mxGeometry height="50" width="330" x="30" y="255" as="geometry" />
         </mxCell>
-        <mxCell id="p5" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="5. Eval  (1 GPU node)&#xa;dreamzero-eval.yaml - LIBERO simulator" vertex="1">
+        <mxCell id="p5" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="5. Eval  (1 GPU node)&#xa;dreamzero-eval.yaml - rollout-only, LIBERO simulator" vertex="1">
           <mxGeometry height="50" width="330" x="30" y="325" as="geometry" />
         </mxCell>
         <mxCell id="p6" parent="pipe" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="6. In-sim rollout video&#xa;video/eval/seed_*/0.mp4 (1-step: success_once=0, expected)" vertex="1">
