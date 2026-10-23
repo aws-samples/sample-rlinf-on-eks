@@ -19,7 +19,9 @@
 # Prerequisites:
 #   - kubectl configured for the target cluster
 #   - ECR_URI, NAMESPACE, S3_BUCKET, and CKPT_PATH environment variables set
-#   - LORA_PATH also required for openvlaoft-ppo example
+#   - LORA_PATH also required for openvlaoft-ppo example: the base adapter
+#     /fsx/models/rlinf-openvlaoft-maniskill-base-lora (PEFT structure only;
+#     trained LoRA weights come from CKPT_PATH full_weights.pt)
 #   - aws CLI configured with S3 access to the FSx data bucket
 #   - ffmpeg installed (only needed if num_action_chunks > 1)
 #   - Model weights and checkpoint already on FSx (run model-download first)

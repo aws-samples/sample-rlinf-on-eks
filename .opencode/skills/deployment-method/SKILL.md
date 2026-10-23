@@ -147,7 +147,7 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 - **S3 source**: `CODEBUILD_RESOLVED_SOURCE_VERSION` is empty for S3 sources. Always use a fallback for image tags.
 - **Cache**: `LOCAL` cache type is not supported for `BUILD_GENERAL1_2XLARGE` compute. Use `NO_CACHE`.
-- **Build time**: Expect ~10-15 min for a full build (dependencies + Flash Attention compilation + ECR push).
+- **Build time**: Expect ~45-50 min for a full build (measured 43–45 min on main@c70606f0, 48.6 min after adding nccl-tests; CodeBuild `build_timeout = 90`) (dependencies + Flash Attention compilation + ECR push).
 - **Interrupted builds**: If a build fails mid-push, the image may be partially uploaded. Check ECR for untagged images.
 
 ## Option C: GitOps (ArgoCD)

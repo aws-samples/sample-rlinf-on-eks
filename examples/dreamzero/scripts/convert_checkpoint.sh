@@ -7,7 +7,7 @@
 #
 # RLinf SFT saves sharded FSDP2 checkpoints under
 #   {log_path}/{experiment_name}/checkpoints/global_step_<N>/actor/dcp_checkpoint/
-# as __<rank>_0.distcp files. The LIBERO simulator eval (eval_embodied_agent.py)
+# as __<rank>_0.distcp files. The LIBERO simulator eval (evaluations/eval_embodied_agent.py)
 # consumes a single consolidated .pt via runner.ckpt_path. This script converts
 # the DCP shards to that .pt using upstream's convert_dcp_to_pt.py.
 #

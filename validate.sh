@@ -19,7 +19,7 @@
 # Levels (cluster mode):
 #   L0: Infrastructure smoke test (GPU, EFA, FSx)
 #   L1: Container build + ECR push
-#   L2: Container validation (10 tests)
+#   L2: Container validation (12 tests)
 #   L3: NCCL/EFA bandwidth threshold
 #   L4: Model download verification
 #   L5: Training step tests (1 PPO step per example)
@@ -72,6 +72,10 @@ Environment Variables:
   CODEBUILD_PROJECT    CodeBuild project name (auto-detected)
   CODEBUILD_BUCKET     S3 bucket for CodeBuild source (auto-detected)
   NCCL_TEST_IMAGE      NCCL test container image (default: public ECR)
+  L3_INSTANCE_TYPE     L3 instance-type profile override (default: read from a
+                       role=gpu-training node; p5en.48xlarge selects the full-node test)
+  L3_P5EN_THRESHOLD    L3 p5en full-node busbw threshold at 16 GiB (default: 391 GB/s)
+  L3_TIMEOUT           L3 full-node MPIJob timeout in seconds (default: 1800)
   NO_COLOR             Disable colored output
 EOF
   exit 0

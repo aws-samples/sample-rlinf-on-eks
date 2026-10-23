@@ -8,7 +8,7 @@
 # Implements levels L0-L6 of the validation framework:
 #   L0: Infrastructure smoke test (GPU, EFA, FSx)
 #   L1: Container build + ECR push (CodeBuild)
-#   L2: Container validation (10 tests)
+#   L2: Container validation (12 tests)
 #   L3: NCCL/EFA bandwidth threshold
 #   L4: Model download verification
 #   L5: Training step tests (1 PPO step per example)
@@ -134,8 +134,8 @@ run_level_1() {
   fi
   log_info "Build started: ${build_id}"
 
-  # Step 3: Poll until complete (timeout: 60 min)
-  local timeout=3600
+  # Step 3: Poll until complete (timeout: 90 min)
+  local timeout=5400
   local elapsed=0
   local status="IN_PROGRESS"
 
@@ -238,47 +238,42 @@ run_level_2() {
 
 # parse_nccl_results LOGS
 #   Extracts BusBW and provider from NCCL all_reduce_perf output.
-#   Outputs: BUSBW_GBS PROVIDER
+#   BusBW is the out-of-place busbw of the LARGEST-message data row (not the
+#   "# Avg bus bandwidth" summary, which averages in latency-bound small sizes).
+#   Outputs: BUSBW_GBS PROVIDER SIZE_BYTES
 parse_nccl_results() {
   local logs="$1"
-  local busbw provider
+  local busbw provider row size
 
   # Strip MPI launcher tag prefixes like "[1,0]<stdout>:" or "[1,0]<stderr>:"
   local clean_logs
   clean_logs=$(echo "$logs" | sed 's/^\[.*\]<std[a-z]*>://; s/^\[.*\]<std[a-z]*>: //')
 
-  # Extract provider: "NET/OFI Selected Provider is efa"
-  provider=$(echo "$clean_logs" | sed -n 's/.*Selected Provider is \([a-zA-Z0-9_]*\).*/\1/p' | head -1)
+  # Extract provider: "NET/OFI Selected provider is efa" (aws-ofi-nccl 1.21 logs
+  # lowercase "provider"; older releases used "Provider").
+  provider=$(echo "$clean_logs" | sed -n 's/.*Selected [Pp]rovider is \([a-zA-Z0-9_]*\).*/\1/p' | head -1)
   provider="${provider:-unknown}"
 
-  # Extract bus bandwidth from the last data row of out-of-place results.
   # NCCL test output format (columns):
   #   size  count  type  redop  root  time  algbw  busbw  #wrong  time  algbw  busbw  #wrong
-  # The out-of-place busbw is field 8 (1-indexed) in data lines starting with digits.
-  busbw=$(echo "$clean_logs" | \
-    grep -E '^\s+[0-9]+' | \
-    tail -1 | \
-    awk '{print $8}')
+  # Data rows: field 1 is an integer size and there are >= 12 fields. Pick the
+  # row with the largest size; its out-of-place busbw is field 8 (1-indexed).
+  row=$(echo "$clean_logs" | \
+    awk '$1 ~ /^[0-9]+$/ && NF >= 12 && $1 + 0 >= max { max = $1 + 0; r = $0 } END { print r }')
+  size=$(echo "$row" | awk '{print $1}')
+  busbw=$(echo "$row" | awk '{print $8}')
 
   # Fallback: try NF-1 (second-to-last column)
   if [[ -z "$busbw" ]] || [[ "$busbw" == "0" ]]; then
-    busbw=$(echo "$clean_logs" | \
-      grep -E '^\s+[0-9]+' | \
-      tail -1 | \
-      awk '{print $(NF-1)}')
+    busbw=$(echo "$row" | awk '{print $(NF-1)}')
   fi
 
   busbw="${busbw:-0}"
-  echo "$busbw $provider"
+  echo "$busbw $provider ${size:-unknown}"
 }
 
 run_level_3() {
   log_header "L3: NCCL/EFA Bandwidth"
-
-  # Use the public NCCL test image (or ECR if available)
-  local nccl_image="${NCCL_TEST_IMAGE:-public.ecr.aws/hpc-cloud/nccl-tests:cuda12.8.1-efa1.43.2-ofiv1.16.3-ncclv2.27.7-1-testsv2.16.9}"
-  export NCCL_TEST_IMAGE="$nccl_image"
-  log_info "NCCL test image: ${nccl_image}"
 
   # Check for MPI Operator CRD
   if ! kubectl get crd mpijobs.kubeflow.org &>/dev/null; then
@@ -286,50 +281,85 @@ run_level_3() {
     return 1
   fi
 
-  # Clean up any previous run
-  cleanup_mpijob nccl-tests
-
-  # Apply MPIJob manifest (only substitute NCCL_TEST_IMAGE, not other $VARs)
-  envsubst '${NCCL_TEST_IMAGE}' < "${_MANIFESTS_DIR}/nccl-tests-mpijob.yaml" | kubectl apply -f -
-
-  # Wait for MPIJob launcher to complete
-  if ! wait_for_mpijob nccl-tests default 600; then
-    cleanup_mpijob nccl-tests
-    return 1
-  fi
-
-  # Get launcher logs
-  local logs
-  logs=$(get_mpijob_launcher_logs nccl-tests)
-
-  if [[ -z "$logs" ]]; then
-    log_fail "No logs from NCCL test launcher"
-    cleanup_mpijob nccl-tests
-    return 1
-  fi
-
-  # Parse results
-  local result busbw provider
-  result=$(parse_nccl_results "$logs")
-  busbw=$(echo "$result" | awk '{print $1}')
-  provider=$(echo "$result" | awk '{print $2}')
-
-  log_info "NCCL Provider: ${provider}"
-  log_info "NCCL BusBW: ${busbw} GB/s"
-
-  # Determine threshold based on instance type
+  # Determine instance type (override with L3_INSTANCE_TYPE), then pick the
+  # threshold and manifest. Instance types with a full-node profile run
+  # nccl-allreduce-fullnode.yaml (our image, all GPUs + all EFA per node);
+  # everything else runs the public-image single-NIC smoke test.
   local threshold=1.0
-  local instance_type
-  instance_type=$(kubectl get nodes -l role=gpu-training \
-    -o jsonpath='{.items[0].metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null)
+  local manifest=nccl-tests-mpijob.yaml
+  local instance_type="${L3_INSTANCE_TYPE:-}"
+  if [[ -z "$instance_type" ]]; then
+    instance_type=$(kubectl get nodes -l role=gpu-training \
+      -o jsonpath='{.items[0].metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null)
+    if [[ -z "$instance_type" ]]; then
+      log_warn "No node labeled role=gpu-training found (no GPU node up yet?); using ${manifest} and default threshold. Set L3_INSTANCE_TYPE to select the profile (e.g. L3_INSTANCE_TYPE=p5en.48xlarge)."
+    fi
+  fi
   case "${instance_type:-}" in
+    # measured 2026-10 on 2x p5en.48xlarge, our image (EFA 1.50.0 / NCCL 2.31.2): 489.5 GB/s @16 GiB; threshold = 80%
+    p5en.48xlarge) threshold=${L3_P5EN_THRESHOLD:-391} ; manifest=nccl-allreduce-fullnode.yaml ;;
     p5.48xlarge)   threshold=100.0 ;;
     p4de.24xlarge) threshold=50.0 ;;
     p4d.24xlarge)  threshold=50.0 ;;
     g6.*)          threshold=1.0 ;;
     *)             threshold=1.0 ;;
   esac
-  log_info "Instance type: ${instance_type:-unknown}, threshold: ${threshold} GB/s"
+  log_info "Instance type: ${instance_type:-unknown}, threshold: ${threshold} GB/s, manifest: ${manifest}"
+
+  local job_name job_ns job_timeout
+  if [[ "$manifest" == "nccl-allreduce-fullnode.yaml" ]]; then
+    job_name=nccl-allreduce-fullnode
+    job_ns=rlinf
+    # Full-node run: large image pull + 8 B..16 GiB sweep; override with L3_TIMEOUT
+    job_timeout=${L3_TIMEOUT:-1800}
+    if [[ -z "${ECR_URI:-}" ]]; then
+      log_fail "ECR_URI required for ${manifest}. Run L1 first or set ECR_URI."
+      return 1
+    fi
+    export ECR_URI
+    log_info "NCCL test image: ${ECR_URI}:latest"
+    cleanup_mpijob "$job_name" "$job_ns"
+    # Only substitute ECR_URI, not other $VARs (single quotes intentional)
+    # shellcheck disable=SC2016
+    envsubst '${ECR_URI}' < "${_MANIFESTS_DIR}/${manifest}" | kubectl apply -f -
+  else
+    job_name=nccl-tests
+    job_ns=default
+    job_timeout=600
+    # Use the public NCCL test image (or ECR if available)
+    local nccl_image="${NCCL_TEST_IMAGE:-public.ecr.aws/hpc-cloud/nccl-tests:cuda12.8.1-efa1.43.2-ofiv1.16.3-ncclv2.27.7-1-testsv2.16.9}"
+    export NCCL_TEST_IMAGE="$nccl_image"
+    log_info "NCCL test image: ${nccl_image}"
+    cleanup_mpijob "$job_name" "$job_ns"
+    # Only substitute NCCL_TEST_IMAGE, not other $VARs
+    envsubst '${NCCL_TEST_IMAGE}' < "${_MANIFESTS_DIR}/${manifest}" | kubectl apply -f -
+  fi
+
+  # Wait for MPIJob launcher to complete
+  if ! wait_for_mpijob "$job_name" "$job_ns" "$job_timeout"; then
+    cleanup_mpijob "$job_name" "$job_ns"
+    return 1
+  fi
+
+  # Get launcher logs
+  local logs
+  logs=$(get_mpijob_launcher_logs "$job_name" "$job_ns")
+
+  if [[ -z "$logs" ]]; then
+    log_fail "No logs from NCCL test launcher"
+    cleanup_mpijob "$job_name" "$job_ns"
+    return 1
+  fi
+
+  # Parse results
+  local result busbw provider size
+  result=$(parse_nccl_results "$logs")
+  busbw=$(echo "$result" | awk '{print $1}')
+  provider=$(echo "$result" | awk '{print $2}')
+  size=$(echo "$result" | awk '{print $3}')
+
+  log_info "NCCL Provider: ${provider}"
+  log_info "NCCL BusBW: ${busbw} GB/s (out-of-place busbw of largest-size row, size=${size} B)"
 
   # Validate provider
   if [[ "$provider" != "efa" ]]; then
@@ -347,7 +377,7 @@ run_level_3() {
     (( busbw_int >= thresh_int )) && pass=1
   fi
 
-  cleanup_mpijob nccl-tests
+  cleanup_mpijob "$job_name" "$job_ns"
 
   if (( pass )); then
     log_pass "NCCL BusBW ${busbw} GB/s >= ${threshold} GB/s (${provider})"
@@ -430,16 +460,18 @@ run_level_4() {
 # =============================================================================
 
 # Per-example configurations
-# Format: "name|venv|config|model_path"
-L5_EXAMPLE_LIST="maniskill-openvlaoft|openvla-oft|maniskill_ppo_openvlaoft_quickstart|/fsx/models/openvla-oft-sft-libero10
-libero-pi0|openpi|libero_spatial_ppo_openpi_quickstart|/fsx/models/rlinf-pi0-sft-spatial"
+# Format: "name|venv|config|model_path|extra_hydra_overrides"
+# OFT quickstart has is_lora=True with a placeholder lora_path -> must point at the
+# staged ManiSkill base LoRA (RLinf/RLinf-OpenVLAOFT-ManiSkill-Base-Lora).
+L5_EXAMPLE_LIST="maniskill-openvlaoft|openvla-oft|maniskill_ppo_openvlaoft_quickstart|/fsx/models/openvla-oft-sft-libero10|actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
+libero-pi0|openpi|libero_spatial_ppo_openpi_quickstart|/fsx/models/rlinf-pi0-sft-spatial|"
 
-# get_l5_example NAME -> outputs "venv|config|model_path" or returns 1
+# get_l5_example NAME -> outputs "venv|config|model_path|extra" or returns 1
 get_l5_example() {
   local name="$1"
-  echo "$L5_EXAMPLE_LIST" | while IFS='|' read -r ex_name ex_venv ex_config ex_model; do
+  echo "$L5_EXAMPLE_LIST" | while IFS='|' read -r ex_name ex_venv ex_config ex_model ex_extra; do
     if [[ "$ex_name" == "$name" ]]; then
-      echo "${ex_venv}|${ex_config}|${ex_model}"
+      echo "${ex_venv}|${ex_config}|${ex_model}|${ex_extra}"
       return 0
     fi
   done
@@ -474,7 +506,7 @@ run_level_5() {
   for example_name in $examples_to_run; do
     local config_str
     config_str=$(get_l5_example "$example_name")
-    IFS='|' read -r venv_name config_name model_path <<< "$config_str"
+    IFS='|' read -r venv_name config_name model_path extra_overrides <<< "$config_str"
 
     log_info "--- L5: ${example_name} ---"
     log_info "  Venv: ${venv_name}, Config: ${config_name}"
@@ -486,6 +518,7 @@ run_level_5() {
     export VENV_NAME="$venv_name"
     export CONFIG_NAME="$config_name"
     export MODEL_PATH="$model_path"
+    export EXTRA_OVERRIDES="$extra_overrides"
     export ECR_URI
 
     # Clean up any previous run
@@ -494,9 +527,11 @@ run_level_5() {
     # Apply the training step test manifest
     envsubst < "${REPO_ROOT}/tests/manifests/training-step-test.yaml" | kubectl apply -n rlinf -f -
 
-    # Wait for completion (15 min per example)
+    # Wait for completion (20 min per example, uniform). libero-pi0's single
+    # 1-GPU step took ~11 min of run time (~13 min wall incl. image pull) on
+    # p5en at main@c70606f0, too close to the old 900s limit.
     timer_start
-    if ! wait_for_job "$job_name" rlinf 900; then
+    if ! wait_for_job "$job_name" rlinf 1200; then
       local elapsed
       elapsed=$(timer_elapsed)
       result_add "L5" "$example_name" "FAIL" "$elapsed"
@@ -565,7 +600,7 @@ run_level_6() {
 
   # Patch to set HYDRA_OVERRIDES for single step
   kubectl set env statefulset/training -n rlinf \
-    HYDRA_OVERRIDES="runner.max_steps=1 runner.save_interval=-1 runner.val_check_interval=-1" \
+    HYDRA_OVERRIDES="actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora runner.max_steps=1 runner.save_interval=-1 runner.val_check_interval=-1" \
     2>/dev/null || true
 
   # Wait for both pods to be Running
@@ -607,7 +642,7 @@ run_level_6() {
     fi
 
     # Check for training step completion
-    if echo "$logs" | grep -q "TRAINING_STEP_TEST_PASSED\|Global Step: 1/1\|step.*1.*completed"; then
+    if echo "$logs" | grep -qE "TRAINING_STEP_TEST_PASSED|Global Step: +1/1|step.*1.*completed"; then
       success=1
       break
     fi

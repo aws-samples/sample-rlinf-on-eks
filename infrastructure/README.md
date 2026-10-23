@@ -152,8 +152,9 @@ Key outputs: `ecr_repository_url`, `codebuild_project_name`, `codebuild_source_b
 | Manifest | Kind | Purpose | Used In |
 |----------|------|---------|---------|
 | `smoke-test.yaml` | Job | GPU, EFA, CUDA, FSx smoke test | L0 |
-| `container-test.yaml` | Job + ConfigMap | 10-test container validation (multi-venv, EFA libs, CUDA) | L2 |
-| `nccl-tests-mpijob.yaml` | MPIJob | NCCL/EFA bandwidth threshold test | L3 |
+| `container-test.yaml` | Job + ConfigMap | 12-test container validation (multi-venv, EFA libs, CUDA) | L2 |
+| `nccl-tests-mpijob.yaml` | MPIJob | NCCL/EFA bandwidth threshold test (single-NIC smoke, public image) | L3 |
+| `nccl-allreduce-fullnode.yaml` | MPIJob | Full-node NCCL all_reduce from the training image (2x8 GPU x16 EFA) | L3 (p5en) |
 | `topology-labeler.yaml` | DaemonSet + RBAC | Labels GPU nodes with EC2 network topology for topology-aware scheduling | Optional (multi-node) |
 | `training-statefulset.yaml` | StatefulSet | Multi-node training (L6 validation) | L6 |
 | `training-service.yaml` | Service (headless) | DNS rendezvous for multi-node training | L6 |

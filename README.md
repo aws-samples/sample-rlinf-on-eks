@@ -13,7 +13,7 @@ RLinf-on-EKS is a skills-based framework that provides working, prescriptive dep
 
 ## About RLinf
 
-[RLinf](https://github.com/RLinf/RLinf) (v0.3, 3k+ GitHub stars) is a flexible and scalable open-source RL infrastructure for Embodied and Agentic AI. Key capabilities:
+[RLinf](https://github.com/RLinf/RLinf) (pinned to main@d844e648, post-v0.4, 2026-10-22; 3k+ GitHub stars) is a flexible and scalable open-source RL infrastructure for Embodied and Agentic AI. Key capabilities:
 
 - **RL Algorithms**: GRPO (Group Relative Policy Optimization), PPO, DAPO, SAC (Soft Actor-Critic), CrossQ, RLPD, SAC-Flow, DSRL, DAgger
 - **Simulators**: ManiSkill, LIBERO, RoboTwin, CALVIN, RoboCasa, IsaacLab, MetaWorld, BEHAVIOR
@@ -87,7 +87,7 @@ EOF
 ./infrastructure/deploy.sh --action apply --layer all
 $(terraform -chdir=infrastructure/cluster output -raw configure_kubectl)
 
-# 3. Build and push container image (~15 min via CodeBuild)
+# 3. Build and push container image (~45-50 min via CodeBuild)
 zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 BUILD_ID=$(aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name) --query 'build.id' --output text)
@@ -124,10 +124,10 @@ kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 
 | Example | Framework | Target | GPU Requirement | Status |
 |---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf v0.3 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf v0.3 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf v0.3 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [DreamZero SFT](examples/dreamzero/) | RLinf v0.3 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
+| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
 
 ---
 

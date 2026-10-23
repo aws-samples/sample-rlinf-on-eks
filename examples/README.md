@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-> **Framework**: RLinf v0.3 -- Reinforcement Learning (RL) Infrastructure for Embodied and Agentic AI
+> **Framework**: RLinf main@d844e648 (post-v0.4, 2026-10-22) -- Reinforcement Learning (RL) Infrastructure for Embodied and Agentic AI
 > **Paper**: Yu et al., "RLinf: Flexible and Efficient Large-scale RL via Macro-to-Micro Flow Transformation", arXiv:2509.15965, 2025
 > **Code**: https://github.com/RLinf/RLinf
 > **Docs**: https://rlinf.readthedocs.io/en/latest/
@@ -27,9 +27,9 @@ We use a **two-stage build** that preserves upstream RLinf's dependency manageme
 
 This gives us:
 - **All upstream dependency management preserved** (uv, multi-venv, install.sh, model-specific isolation)
-- **Multiple models per image** (e.g., `embodied-maniskill_libero` ships 6 venvs: openvla, openvla-oft, openpi, gr00t, dexbotic, starvla)
+- **Multiple models per image** (e.g., `embodied-maniskill_libero` ships 13 venvs: openvla, openvla-oft, openpi, gr00t, gr00t_n1d6, gr00t_n1d7, dexbotic, starvla, abot_m0, dreamzero, molmoact2, evo1, fastwam)
 - **EFA networking for multi-node NCCL (NVIDIA Collective Communications Library) on EKS**
-- **Any `BUILD_TARGET` works** -- we can build EKS images for any of the 15 upstream variants
+- **Any `BUILD_TARGET` works** -- we can build EKS images for any of the 20 upstream variants
 
 The `switch_env` utility selects the active model at runtime:
 ```bash
@@ -40,7 +40,7 @@ source switch_env openpi       # pi0
 
 ## Examples
 
-All examples run from the **same unified container image** (`BUILD_TARGET=embodied-maniskill_libero` plus a `dreamzero`-venv overlay, built once and pushed to `:latest`). Examples differ only by the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables — the PPO examples activate `openvla`/`openvla-oft`/`openpi`, DreamZero activates `dreamzero`. venvs are isolated, so one image serves every example.
+All examples run from the **same unified container image** (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream, built once and pushed to `:latest`). Examples differ only by the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables — the PPO examples activate `openvla`/`openvla-oft`/`openpi`, DreamZero activates `dreamzero`. venvs are isolated, so one image serves every example.
 
 | Example | Simulator | Algorithm | Model | Venv | Config |
 |---------|-----------|-----------|-------|------|--------|
@@ -59,7 +59,7 @@ All examples run from the **same unified container image** (`BUILD_TARGET=embodi
 | **CPU** | High core count per node (for parallel env rendering) |
 | **Memory** | ~1.8TB per node |
 | **Network** | Low-latency, high-bandwidth for NCCL allreduce (EFA) |
-| **Storage** | Shared filesystem for checkpoints + model weights (FSx for Lustre). Plan >=250GB free for the DreamZero 14B example (a 14B FSDP DCP checkpoint is ~140-206GB). |
+| **Storage** | Shared filesystem for checkpoints + model weights (FSx for Lustre). Plan >=250GB free for the DreamZero 14B example (a 14B FSDP DCP checkpoint is ~207 GB on disk (223.7 GB apparent)). |
 
 This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for the DreamZero example; other GPU instances with equivalent-or-greater per-GPU VRAM and EFA support are expected to work. Infrastructure/EFA/NCCL validation only was run on g6.8xlarge.
 
@@ -68,12 +68,12 @@ This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for th
 | Layer | Component | Version |
 |-------|-----------|---------|
 | **Python** | uv-managed venvs | Python 3.11 |
-| **Framework** | PyTorch | 2.6.0 (upstream default) |
-| **CUDA** | CUDA (Compute Unified Device Architecture) Toolkit | 12.4 |
-| **RL Framework** | RLinf | 0.3 |
+| **Framework** | PyTorch | 2.11.0+cu128 (upstream default) |
+| **CUDA** | CUDA (Compute Unified Device Architecture) Toolkit | 12.8.1 |
+| **RL Framework** | RLinf | main@d844e648 (post-v0.4) |
 | **Distributed** | Ray | >=2.47.0 |
-| **EFA** | EFA Installer | 1.47.0 |
-| **NCCL** | NCCL (source-built) | 2.21.5-1 |
+| **EFA** | EFA Installer | 1.50.0 (libfabric 2.6.0amzn1.0, aws-ofi-nccl 1.21.1) |
+| **NCCL** | NCCL (source-built) | 2.31.2-1 (+ nccl-tests v2.20.0) |
 | **Config** | Hydra / OmegaConf | Latest |
 | **Tracking** | TensorBoard (default) | Latest |
 
@@ -92,7 +92,7 @@ The training container is built in two stages:
 | RLinf venvs | Per-model Python environments (openvla, openpi, etc.) | `/opt/venv/` |
 | RLinf source | PPO training loop, Hydra configs, veRL workers | `/workspace/RLinf/` |
 | DreamZero (optional) | Video world model SFT | `/workspace/DreamZero/` |
-| EFA stack | libfabric 2.4, aws-ofi-nccl, NCCL, GDRCopy (GPU Direct RDMA Copy), OpenMPI | `/opt/amazon/`, `/opt/nccl/` |
+| EFA stack | libfabric 2.6, aws-ofi-nccl 1.21.1, NCCL 2.31.2, nccl-tests, GDRCopy (GPU Direct RDMA Copy), OpenMPI | `/opt/amazon/`, `/opt/nccl/` |
 | EKS scripts | Training launcher, install_extras | `/workspace/eks/scripts/` |
 | Runtime mounts | Model weights, datasets, checkpoints, EFA devices | `/fsx/` (PVC (PersistentVolumeClaim)) |
 
@@ -201,9 +201,9 @@ The repo includes a layered validation harness that tests the full stack from st
 | Level | Name | What it Tests | Approx Time |
 |-------|------|---------------|-------------|
 | L0 | Infrastructure | GPU, EFA devices, FSx mount | ~1 min |
-| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~15 min |
-| L2 | Container Test | 10 tests: CUDA, EFA libs, venvs, Ray, MPI (Message Passing Interface) | ~2 min |
-| L3 | NCCL/EFA | allreduce bandwidth threshold via MPIJob | ~3 min |
+| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~45-50 min (measured 43–45 min on main@c70606f0; 48.6 min with EFA 1.50.0 + nccl-tests; build_timeout 90 min) |
+| L2 | Container Test | 12 tests: CUDA, EFA libs, venvs, torch version, comms stack versions, Ray, MPI (Message Passing Interface) | ~2 min |
+| L3 | NCCL/EFA | allreduce bandwidth threshold via MPIJob (p5en: full-node, >= 391 GB/s busbw at 16 GiB) | ~3-4 min |
 | L4 | Model Download | HuggingFace model weights to FSx | ~30 min |
 | L5 | Training Steps | 1 PPO step per example (x3) | ~30 min |
 | L6 | Multi-Node | 2-node Ray cluster, 1 training step | ~10 min |

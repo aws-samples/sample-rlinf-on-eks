@@ -1,0 +1,197 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# =============================================================================
+# NCCL AllReduce -- full-node (MPIJob, OUR training image)
+#
+# What it tests:
+#   all_reduce_perf across 2 nodes x 8 GPUs x 16 EFA (p5en.48xlarge profile),
+#   using the exact NCCL / aws-ofi-nccl / libfabric stack baked into the
+#   training image (${ECR_URI}:latest -> /opt/nccl-tests/build/all_reduce_perf,
+#   built against /opt/nccl/build + /opt/amazon/openmpi). This is the L3
+#   bandwidth gate for p5en; nccl-tests-mpijob.yaml (public image, 1 GPU,
+#   1 EFA) remains the quick single-NIC smoke test.
+#
+#   NCCL_ALGO / NCCL_PROTO are intentionally NOT set: default selection is what
+#   training uses. (NCCL 2.31.2 PAT+NVLS regresses on H100; PAT is off by
+#   default -- do not force NCCL_ALGO=PAT.)
+#
+# Prerequisites:
+#   1. Kubeflow MPI Operator installed (addons layer: enable_mpi_operator)
+#   2. EFA device plugin + NVIDIA GPU Operator running
+#   3. 2 free p5en.48xlarge nodes (8 GPU, 16 EFA each), labeled role=gpu-training
+#
+# Usage:
+#   export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+#   envsubst '${ECR_URI}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
+#   kubectl logs -n rlinf -f $(kubectl get pods -n rlinf -o name \
+#     -l training.kubeflow.org/job-name=nccl-allreduce-fullnode,training.kubeflow.org/job-role=launcher)
+#   kubectl delete mpijob nccl-allreduce-fullnode -n rlinf
+#
+# Expected output lines (launcher log, prefixed by --tag-output "[1,N]<stdout>:"):
+#   NET/OFI Initializing aws-ofi-nccl 1.21.1
+#   NET/OFI Selected provider is efa, fabric is efa-direct (found 16 nics)
+#   NCCL INFO ... NCCL version 2.31.2+cuda12.8
+#   one data row per size, 8 B .. 16 GiB, ending with
+#     17179869184  4294967296  float  sum  -1  <time>  <algbw>  <busbw>  0 ...
+#   # Avg bus bandwidth    : <value>
+# tests/lib/cluster.sh L3 gates on the out-of-place busbw of the LARGEST-size
+# row (16 GiB), not on "# Avg bus bandwidth".
+# =============================================================================
+apiVersion: kubeflow.org/v2beta1
+kind: MPIJob
+metadata:
+  name: nccl-allreduce-fullnode
+  namespace: rlinf
+spec:
+  runPolicy:
+    cleanPodPolicy: Running
+    # Fail fast: a failing mpirun ends the job instead of restarting until the
+    # L3 timeout. runPolicy.backoffLimit is copied to the launcher batch Job
+    # (mpi-operator v2beta1, v0.5.0 as installed by the addons layer).
+    backoffLimit: 3
+  # Create the launcher only after both workers are Ready (sshd running), so a
+  # small backoffLimit is not spent on SSH-connect failures while the workers
+  # are still pulling the training image. (v2beta1 field, default AtStartup.)
+  launcherCreationPolicy: WaitForWorkersReady
+  # slotsPerWorker = GPUs per node
+  slotsPerWorker: 8
+  mpiReplicaSpecs:
+    Launcher:
+      replicas: 1
+      # Replica-level restartPolicy (v2beta1 ReplicaSpec field). It overrides the
+      # pod template's restartPolicy; setting it in the template only triggers a
+      # SetPodTemplateRestartPolicy warning event. Never = a failed mpirun leaves
+      # a Failed launcher pod (wait_for_mpijob fails at once) instead of an
+      # in-place OnFailure restart loop.
+      restartPolicy: Never
+      template:
+        spec:
+          # Same nodes as the workers so the launcher reuses the cached training
+          # image. It requests no GPUs/EFA (small cpu/mem), so it can co-locate
+          # on a worker node.
+          nodeSelector:
+            role: gpu-training
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          containers:
+            - image: ${ECR_URI}:latest
+              imagePullPolicy: IfNotPresent
+              name: nccl-allreduce-launcher
+              env:
+                # NOTE: These env vars must survive envsubst without expansion.
+                # Use explicit absolute paths (no $VAR references); apply with
+                # restricted envsubst '${ECR_URI}'.
+                - name: LD_LIBRARY_PATH
+                  value: /opt/amazon/openmpi/lib:/opt/nccl/build/lib:/opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/opt/gdrcopy/lib:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/lib
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: 2Gi
+              command:
+                - /opt/amazon/openmpi/bin/mpirun
+                - --allow-run-as-root
+                - --tag-output
+                - -np
+                # Total GPUs = 2 workers * 8 GPUs
+                - "16"
+                - -N
+                # GPUs per worker
+                - "8"
+                - --bind-to
+                - none
+                - -x
+                - LD_LIBRARY_PATH
+                - -x
+                - LD_PRELOAD=/opt/nccl/build/lib/libnccl.so
+                - -x
+                - FI_PROVIDER=efa
+                - -x
+                - FI_EFA_USE_DEVICE_RDMA=1
+                - -x
+                - FI_EFA_FORK_SAFE=1
+                - -x
+                - NCCL_DEBUG=INFO
+                - -x
+                - NCCL_TUNER_PLUGIN=/opt/amazon/ofi-nccl/lib/libnccl-ofi-tuner.so
+                - --mca
+                - pml
+                - ^ucx
+                - --mca
+                - btl
+                - tcp,self
+                - --mca
+                - btl_tcp_if_exclude
+                - lo,docker0,veth_def_agent
+                # --mca mtl ^ofi: keep MPI messaging off EFA so NCCL owns the NICs.
+                - --mca
+                - mtl
+                - ^ofi
+                - /opt/nccl-tests/build/all_reduce_perf
+                - -b
+                - "8"
+                - -e
+                - "16G"
+                - -f
+                - "2"
+                - -g
+                - "1"
+                - -c
+                - "1"
+                - -n
+                - "50"
+    Worker:
+      replicas: 2
+      template:
+        metadata:
+          labels:
+            app: nccl-allreduce-fullnode-worker
+        spec:
+          nodeSelector:
+            role: gpu-training
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          # One worker per node: 2 workers must land on distinct hosts.
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app: nccl-allreduce-fullnode-worker
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - image: ${ECR_URI}:latest
+              imagePullPolicy: IfNotPresent
+              name: nccl-allreduce-worker
+              # The training image has no sshd entrypoint (CMD is /bin/bash, no
+              # ENTRYPOINT), unlike the public nccl-tests image, and the MPI
+              # Operator v2beta1 does not start sshd itself -- the launcher's
+              # mpirun reaches workers over SSH, so start sshd here.
+              # env -u LD_PRELOAD keeps the image's libnccl preload out of sshd.
+              command: ["/bin/bash", "-c"]
+              args: ["ssh-keygen -A && mkdir -p /run/sshd && exec env -u LD_PRELOAD /usr/sbin/sshd -De"]
+              volumeMounts:
+                - name: shmem
+                  mountPath: /dev/shm
+              # p5en.48xlarge: 8x H200, 16x EFA, 192 vCPU, 2 TiB RAM
+              resources:
+                limits:
+                  nvidia.com/gpu: 8
+                  vpc.amazonaws.com/efa: 16
+                  hugepages-2Mi: 5120Mi
+                  cpu: "90"
+                  memory: 1000Gi
+                requests:
+                  nvidia.com/gpu: 8
+                  vpc.amazonaws.com/efa: 16
+                  hugepages-2Mi: 5120Mi
+                  cpu: "90"
+                  memory: 1000Gi
+          volumes:
+            - name: shmem
+              hostPath:
+                path: /dev/shm

@@ -4,12 +4,19 @@
 # DreamZero LIBERO 14B Simulator Eval (single-node GPU Job)
 # =============================================================================
 # Evaluates a trained DreamZero 14B checkpoint (full_weights.pt) in the LIBERO
-# Spatial simulator via upstream examples/embodiment/eval_embodied_agent.py,
+# Spatial simulator via upstream evaluations/eval_embodied_agent.py,
 # reporting success_once and saving in-sim rollout videos.
 #
 # This is a single-pod GPU Job (NOT a StatefulSet): the eval config pins
-# cluster.num_nodes=1, so there is no Ray head/worker split. The 14B model is
-# sharded across the 8 GPUs of one p5en.48xlarge node with single-node FSDP.
+# cluster.num_nodes=1, so there is no Ray head/worker split. Eval is
+# single-node, rollout-only (HF rollout worker per GPU) on one p5en.48xlarge
+# (8x H200); there is no actor/FSDP in the eval path.
+#
+# Runtime: the default max_steps_per_rollout_epoch=15360 runs the full
+# LIBERO-Spatial suite (roughly 16x the ~23 min smoke run, i.e. multiple hours
+# on 1 p5en); for a quick smoke test pass
+# HYDRA_OVERRIDES="env.eval.max_steps_per_rollout_epoch=960" (~23 min, 32
+# trajectories) as a container env var.
 #
 # Prerequisites:
 #   - SFT checkpoint converted to a single .pt (convert-checkpoint.yaml), at
@@ -28,8 +35,8 @@
 #   kubectl -n ${NAMESPACE} create configmap dreamzero-eval-launcher \
 #     --from-file=run_dreamzero_eval_eks.sh=examples/dreamzero/scripts/run_dreamzero_eval_eks.sh \
 #     --dry-run=client -o yaml | kubectl apply -f -
-#   # 2) the 14B eval config (mounted at /opt/eval-config, copied into the
-#   #    embodiment config dir by the launcher so upstream config groups stay visible):
+#   # 2) the 14B eval config (mounted at /opt/eval-config, copied into
+#   #    evaluations/libero/ by the launcher so upstream eval configs stay visible):
 #   kubectl -n ${NAMESPACE} create configmap dreamzero-eval-config \
 #     --from-file=libero_spatial_eval_dreamzero_14b.yaml=examples/dreamzero/configs/libero_spatial_eval_dreamzero_14b.yaml \
 #     --dry-run=client -o yaml | kubectl apply -f -

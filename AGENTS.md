@@ -68,9 +68,9 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 | Level | What | Timeout | Notes |
 |-------|------|---------|-------|
 | L0 | GPU, EFA, CUDA, FSx smoke test | 10m | `infrastructure/manifests/smoke-test.yaml` |
-| L1 | CodeBuild container build + ECR push | 60m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
-| L2 | Container validation (10 tests) | 20m | Tests multi-venv, EFA libs, CUDA |
-| L3 | NCCL/EFA bandwidth threshold | 10m | MPIJob via MPI Operator; threshold varies by instance |
+| L1 | CodeBuild container build + ECR push | 90m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
+| L2 | Container validation (12 tests) | 20m | Tests multi-venv, EFA libs, CUDA |
+| L3 | NCCL/EFA bandwidth threshold | 10m smoke / up to 30m full-node | MPIJob via MPI Operator; threshold varies by instance. p5en: full-node `nccl-allreduce-fullnode.yaml` (2x8 GPU x16 EFA, our image), 391 GB/s at 16 GiB (`L3_P5EN_THRESHOLD`) |
 | L4 | Model download to FSx | 30m | Downloads models for all examples |
 | L5 | 1 training step per example | 15m each | Per-example; see `examples/AGENTS.md` |
 | L6 | Multi-node training step | 20m | Requires 2+ GPU nodes; uses StatefulSet + Ray |
@@ -79,8 +79,8 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 
 ### EFA Networking
 - **EKS node SG needs self-referencing egress rule** (protocol `-1`, self -> self). Without it, EFA RDMA silently fails with `comp_status 5 err -22`. The ingress rule alone is NOT enough. Verified in `infrastructure/cluster/main.tf` `efa_all_traffic_egress`.
-- **EFA installer must be >= 1.47.0**. Versions 1.34.0/1.38.0 bundle broken libfabric 1.22. Installer 1.47.0 bundles libfabric 2.4.0 + aws-ofi-nccl 1.18.0.
-- **NCCL v2.21.5-1 for CUDA 12.4 base** -- NCCL 2.29+ requires CUDA 12.8+.
+- **EFA installer 1.50.0 in the image, run with `--disable-ngc`** (bundles libfabric 2.6.0amzn1.0 + aws-ofi-nccl 1.21.1). Versions 1.34.0/1.38.0 bundle broken libfabric 1.22. Since 1.48.0 the installer auto-detects NGC containers via `/opt/nvidia/nvidia_entrypoint.sh` (present in the `nvidia/cuda` base) and would install `libnccl-ofi-ngc-v3`, which lacks `libnccl-ofi-tuner.so`; `--disable-ngc` keeps the regular `libnccl-ofi` package. The HOST installer in `infrastructure/cluster/scripts/gpu-node-bootstrap.sh` is still 1.47.0 (node driver/kmod only).
+- **NCCL v2.31.2-1 on the CUDA 12.8.1 base** (upstream moved to CUDA 12.8 at main@6f46f36a); sm_100 (B200) is in the gencode list. aws-ofi-nccl 1.21.1 (EFA 1.50.0) is tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either. Known issue: NCCL 2.31.2 PAT+NVLS has a performance regression on H100; PAT is off by default, so do not set `NCCL_ALGO=PAT`. nccl-tests is pinned to v2.20.0 (v2.21.0 needs NCCL >= 2.32).
 - **`efa_nv_peermem` kernel module is installed but NOT loaded** on EKS GPU AMI. Needs DaemonSet with `modprobe`.
 - **Single-EFA instances**: use `--mca mtl ^ofi` with OpenMPI to avoid OFI MTL conflicts with NCCL.
 
@@ -104,18 +104,18 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 - **FSDP on a single GPU cannot shard** -- full model must fit in VRAM.
 - **g6.8xlarge (~$1/hr) validates infrastructure (L0-L4 + EFA) but NOT training (L5-L6)**. Use p-class instances for training.
 - **DreamZero LIBERO 14B requires 2x p5en.48xlarge** (8x H200 each). FSDP2 `full_shard` across 16 GPUs; the 16.48B model is sharded.
-- **DreamZero 14B DCP checkpoint = ~140-206GB** (16 FSDP shards incl. full optimizer state). A FULL FSx truncates `torch.save` mid-write (`inline_container.cc unexpected pos`) → corrupt unreadable shards. Ensure >=250GB free before an SFT run.
+- **DreamZero 14B DCP checkpoint = ~207 GB on disk (223.7 GB apparent)** (16 FSDP shards incl. full optimizer state). A FULL FSx truncates `torch.save` mid-write (`inline_container.cc unexpected pos`) → corrupt unreadable shards. Ensure >=250GB free before an SFT run.
 
-### DreamZero LIBERO 14B (validated end-to-end on EKS, 2026-06)
+### DreamZero LIBERO 14B (validated end-to-end on EKS, 2026-06; revalidated on main@c70606f0, 2026-10)
 Full details + every gotcha in `examples/AGENTS.md`. Headlines:
-- **FSDP2 + KubeRay RayJob multi-node (NOT torchrun/DeepSpeed/StatefulSet)**. Runs from the unified image (`BUILD_TARGET=embodied-maniskill_libero` + a `dreamzero`-venv overlay) with `VENV_NAME=dreamzero`. `groot` is external via `DREAMZERO_PATH`.
-- **The `dreamzero` venv is added by the EKS overlay** (`examples/Dockerfile`) onto the `embodied-maniskill_libero` base when absent, so one image serves all examples.
+- **FSDP2 + KubeRay RayJob multi-node (NOT torchrun/DeepSpeed/StatefulSet)**. Runs from the unified image (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream) with `VENV_NAME=dreamzero`. `groot` is external via `DREAMZERO_PATH`.
+- **The `dreamzero` venv ships in upstream `embodied-maniskill_libero`** (13 venvs at main@c70606f0); `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise. One image serves all examples.
 - **Apply manifests with restricted envsubst** (`envsubst '${ECR_URI} ${NAMESPACE}'`) — the KubeRay operator handles Ray head election, but the RayJob entrypoint still embeds inline bash that unrestricted envsubst would clobber.
-- **Hydra `+` prefix** for keys absent from the config struct (`metadata_json_path`, `save_full_model_weights`).
+- **Hydra `+` prefix** for keys absent from the config struct (`metadata_json_path`, `save_full_model_weights`) -- SFT launcher only (`+actor.model.metadata_json_path`). Eval sets `rollout.model.metadata_json_path` with no `+` (it is in the eval struct).
 - **Generate `libero_sim` metadata** (DROID checkpoint bundles only `oxe_droid`) and override `num_action_per_block=16` (DROID default 24 breaks the LIBERO forward pass).
 - **Dataset is `physical-intelligence/libero`**, NOT `lerobot/libero` (schema differs).
 - **Checkpoint → eval**: SFT writes a sharded FSDP DCP; convert to `.pt` offline on CPU (`convert-checkpoint.yaml`). The launcher forces `+actor.fsdp_config.save_full_model_weights=false` (the 14B config omits it → code default `True` → 16B full gather hits `nccl does not support allgather_into_tensor_coalesced`).
-- **DCP finalization crash (reproduced + root-caused + fixed, 2026-06)**: torch 2.6 `dcp.save` broadcasts its multi-MB finalization object over the default NCCL PG on CUDA, racing with NCCL teardown at the end of a long (~209GB) write → `UnpicklingError: invalid load key '\x00'` on non-coordinator ranks AFTER all shards + `.metadata` are on disk. Fixed by `dcp-save-gloo-coordinator.patch` (pass a gloo PG to `dcp.save`, like torch 2.7+). Validated on 2x p5en: SUCCEEDED, zero crashes.
+- **DCP finalization crash -- no longer needs a patch**: the torch 2.6 NCCL finalization race (`UnpicklingError`) does not reproduce on torch 2.11 (main@c70606f0); the patch was removed (validated: 2x p5en, 16-shard 223.7 GB DCP save, 0 `UnpicklingError`, 2026-10). History: on torch 2.6 (RLinf v0.3, 2026-06) `dcp.save` broadcast its finalization object over the default NCCL PG, racing with NCCL teardown at the end of a ~209GB write → `UnpicklingError: invalid load key '\x00'` after all shards were on disk; it was worked around with an in-image gloo-PG patch, now deleted.
 - **Eval** is LIBERO simulator (`eval/success_once` + in-sim rollout video). `total_num_envs=16` for 14B (128 OOMs).
 
 ## Design Principles
@@ -123,7 +123,7 @@ Full details + every gotcha in `examples/AGENTS.md`. Headlines:
 1. **Prescriptive over descriptive** -- skills contain exact commands, not general guidance.
 2. **Validate cheap, train expensive** -- always validate EFA/NCCL on g6.8xlarge (~$1/hr) before using p5.48xlarge (~$98/hr).
 3. **Infrastructure as code** -- everything in Terraform, K8s manifests, Dockerfiles. No ClickOps.
-4. **ConfigMap-mounted scripts for runtime hotfixes** -- avoids expensive (~15 min) CodeBuild cycle for each fix.
+4. **ConfigMap-mounted scripts for runtime hotfixes** -- avoids expensive (~45 min) CodeBuild cycle for each fix.
 5. **Layered infrastructure** -- 5 independent Terraform layers with explicit cross-layer variable passing. No implicit dependencies.
 
 ## Autonomous Session Rules
@@ -137,4 +137,5 @@ When you need clarification or a decision from the user, you **MUST** use the `q
 | 1.34.0 | 1.22.0amzn4.0 | NOT bundled | BROKEN |
 | 1.38.0 | 1.22.0amzn4.0 | NOT bundled | BROKEN |
 | 1.43.0 | 2.1.0amzn4.0 | 1.16.1 | Works once SG egress fixed |
-| **1.47.0** | **2.4.0amzn1.0** | **1.18.0** | Current (in Dockerfile) |
+| 1.47.0 | 2.4.0amzn1.0 | 1.18.0 | Works (previous image; still the HOST installer in gpu-node-bootstrap.sh) |
+| **1.50.0** | **2.6.0amzn1.0** | **1.21.1** | Current (in Dockerfile, with `--disable-ngc`) |

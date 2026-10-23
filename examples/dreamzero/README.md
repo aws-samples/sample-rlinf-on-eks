@@ -14,12 +14,12 @@ Continue supervised fine-tuning (SFT) of the released **DreamZero-DROID 14B Worl
 
 This is the canonical customer workflow: take a pretrained DreamZero checkpoint and adapt it to your own robot data, then close the loop with simulator evaluation.
 
-> **Validation scope (read this first):** The pipeline was validated end-to-end on EKS — build, multi-node EFA/NCCL, FSDP2 sharded checkpointing, DCP→`.pt` conversion, and LIBERO simulator eval. A **300-step** SFT run on 2x p5en.48xlarge reduced `train/loss` **0.232 → 0.085** (~6.9 s/step) and wrote a **207 GB** sharded checkpoint with no corruption or save-time crashes — demonstrating the pipeline *trains and converges*. This is **not** a task-accuracy claim: 300 steps is a short run (the released 14B checkpoint trained for 100K), so a checkpoint from a short run yields low `eval/success_once`. For real accuracy, train longer (see [Results](#results)). No success numbers or loss curves are fabricated here.
+> **Validation scope (read this first):** The pipeline was validated end-to-end on EKS — build, multi-node EFA/NCCL, FSDP2 sharded checkpointing, DCP→`.pt` conversion, and LIBERO simulator eval. A **300-step** SFT reference run (RLinf v0.3) on 2x p5en.48xlarge reduced `train/loss` **0.232 → 0.085** (~6.9 s/step) and wrote a **207 GB** sharded checkpoint with no corruption or save-time crashes — demonstrating the pipeline *trains and converges*. This is **not** a task-accuracy claim: 300 steps is a short run (the released 14B checkpoint trained for 100K), so a checkpoint from a short run yields low `eval/success_once`. For real accuracy, train longer (see [Results](#results)). No success numbers or loss curves are fabricated here.
 
 ## What This Demonstrates
 
 - **Cross-embodiment transfer (the customer story).** The released `GEAR-Dreams/DreamZero-DROID` checkpoint was pretrained on DROID (Franka arm). We continue SFT on `physical-intelligence/libero` (a different embodiment, `libero_sim`) to show how you would adapt DreamZero to *your* robot's trajectories. There is no native LIBERO 14B checkpoint upstream — warm-starting from DROID is the point.
-- **Multi-node GPU training on EKS.** RLinf's `Cluster` (Ray) scheduler fans FSDP2 `full_shard` across 16 H200s on 2 nodes. Gradient sync flows over NCCL on EFA RDMA (libfabric 2.4 / aws-ofi-nccl 1.18, GDRDMA). This is the FSDP2 + Ray design — **not** torchrun/DeepSpeed.
+- **Multi-node GPU training on EKS.** RLinf's `Cluster` (Ray) scheduler fans FSDP2 `full_shard` across 16 H200s on 2 nodes. Gradient sync flows over NCCL on EFA RDMA (libfabric 2.6 / aws-ofi-nccl 1.21.1, GDRDMA). This is the FSDP2 + Ray design — **not** torchrun/DeepSpeed.
 - **Closed-loop simulator evaluation.** The trained model is evaluated *in the LIBERO simulator* (not offline video prediction): it drives the sim, reports `eval/success_once`, and the world-model generates in-sim rollout videos (written to `{log_path}/video/eval/seed_*/0.mp4`). These rollouts exercise the rendering/eval machinery; a competent policy requires a long training run, so no rollout is shipped here as a showcase artifact.
 
 ## Architecture
@@ -65,7 +65,7 @@ The video loss is not auxiliary — it is the mechanism by which the model learn
 | GPUs total | 16 (2 nodes x 8) |
 | Scheduler | RLinf `Cluster` (Ray head/worker) — **not** torchrun |
 | Shard strategy | FSDP2 `full_shard` across all 16 GPUs (the 16.48B model is sharded, not replicated) |
-| Networking | EFA RDMA, 16 NICs/node (libfabric 2.4, aws-ofi-nccl 1.18, NCCL over GDRDMA) |
+| Networking | EFA RDMA, 16 NICs/node (libfabric 2.6, aws-ofi-nccl 1.21.1, NCCL v2.31.2-1 over GDRDMA) |
 | Storage | Shared FSx for Lustre at `/fsx` (models, dataset, checkpoints) |
 
 The KubeRay operator starts the Ray head and one worker, then runs the Ray-agnostic launcher as the head `entrypoint` once the cluster is ready; `shutdownAfterJobFinishes` tears the cluster down when training ends. Pod anti-affinity guarantees one pod per physical node.
@@ -79,11 +79,11 @@ export NAMESPACE=rlinf
 export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
 ```
 
-**Prerequisites:** an EKS cluster that can provision 2x p5en.48xlarge via Karpenter, an FSx for Lustre PVC `fsx-claim` bound at `/fsx` (plan **≥250 GB free** — a 14B FSDP DCP checkpoint is ~140–206 GB), and the `training-sa` ServiceAccount (all created by `infrastructure/deploy.sh`).
+**Prerequisites:** an EKS cluster that can provision 2x p5en.48xlarge via Karpenter, an FSx for Lustre PVC `fsx-claim` bound at `/fsx` (plan **≥250 GB free** — a 14B FSDP DCP checkpoint is ~207 GB on disk (223.7 GB apparent)), and the `training-sa` ServiceAccount (all created by `infrastructure/deploy.sh`).
 
 ### 1. Build the container
 
-DreamZero runs in the **`dreamzero` venv**. The image is built once from `BUILD_TARGET=embodied-maniskill_libero` (which ships the PPO venvs + ManiSkill/openpi assets); `examples/Dockerfile` then adds the `dreamzero` venv as an overlay (installed via RLinf's `install.sh` when the base target lacks it), so a single `:latest` image serves every example. The external `groot` package is cloned from `github.com/RLinf/dreamzero.git` by the buildspec and placed on `PYTHONPATH` via `DREAMZERO_PATH`. Both external repos are pinned in `examples/buildspec.yml` (`UPSTREAM_REF=0505431899574619da86f551bad70b71e0ea2177` (RLinf v0.3), `DREAMZERO_REF=ab790c198fbc`).
+DreamZero runs in the **`dreamzero` venv**. The image is built once from `BUILD_TARGET=embodied-maniskill_libero`, which at main@d844e648 ships 13 venvs, including `dreamzero`, plus the ManiSkill/openpi assets. `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero` (which ships the `dreamzero` venv); the build fails otherwise, so a single `:latest` image serves every example. The buildspec clones the external `groot` package from `github.com/RLinf/dreamzero.git` and puts it on `PYTHONPATH` via `DREAMZERO_PATH`. Both external repos are pinned in `examples/buildspec.yml`: `UPSTREAM_REF=d844e6485d9c00da497b1e1980996fe36da6fb1c` (RLinf main 2026-10-22, post-v0.4) and `DREAMZERO_REF=ab790c198fbc`.
 
 ```bash
 zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
@@ -151,7 +151,7 @@ kubectl logs -f job/dreamzero-convert -n "$NAMESPACE"
 
 ### 5. LIBERO simulator eval (single-node GPU)
 
-Single-pod GPU Job (`cluster.num_nodes=1`, single-node FSDP across 8 H200). Uses our 14B eval config `configs/libero_spatial_eval_dreamzero_14b.yaml` (upstream ships only a 5B eval config). Create **both** ConfigMaps — the launcher *and* the eval config (the config is copied into the embodiment config dir at runtime so upstream config groups stay visible; mounting over the dir would hide them):
+Single-pod GPU Job (`cluster.num_nodes=1`): rollout-only, one HF rollout worker per GPU across 8 H200. It uses our 14B eval config `configs/libero_spatial_eval_dreamzero_14b.yaml`, because upstream ships only a 5B eval config. Create **both** ConfigMaps, the launcher *and* the eval config. At runtime the config is copied into `evaluations/libero/`, the config dir of upstream's `evaluations/eval_embodied_agent.py`; mounting over the dir would hide the upstream eval configs:
 
 ```bash
 kubectl -n "$NAMESPACE" create configmap dreamzero-eval-launcher \
@@ -169,6 +169,8 @@ kubectl logs -f job/dreamzero-eval -n "$NAMESPACE"
 
 The eval reports `eval/success_once` and (with `SAVE_VIDEO=True`, the default) writes in-sim rollout videos to `{LOG_DIR}/video/eval/seed_*/0.mp4`. The 14B config uses `total_num_envs=16` (the upstream 5B default of 128 OOMs the 16.48B model co-located with the sim on 8x H200).
 
+The default `max_steps_per_rollout_epoch=15360` runs the full LIBERO-Spatial suite (roughly 16x the ~23 min smoke run, i.e. multiple hours on 1 p5en); for a quick smoke test pass `HYDRA_OVERRIDES="env.eval.max_steps_per_rollout_epoch=960"` (~23 min, 32 trajectories). Add it as an env var on the `dreamzero-eval` container; the launcher appends `HYDRA_OVERRIDES` to its Hydra args.
+
 ### 6. In-sim rollout videos
 
 The eval's in-sim rollout MP4s land on FSx at `/fsx/checkpoints/dreamzero-libero-eval/video/eval/seed_*/0.mp4` (this replaced the old offline DROID prediction/compose pipeline). Copy one out for inspection:
@@ -184,7 +186,7 @@ A checkpoint from a short training run produces rollouts where the robot drifts 
 
 The authoritative, full list lives in [`examples/AGENTS.md`](../AGENTS.md) (DreamZero section). The ones you are most likely to hit:
 
-- **`dreamzero` venv (unified image overlay).** `VENV_NAME=dreamzero`; `examples/Dockerfile` installs it onto the `embodied-maniskill_libero` base when absent. It must be its own venv — layering `dreamzero.txt` onto another env hits an unsatisfiable `lerobot 0.3.3` vs `torchcodec 0.2` resolve (isolated venvs avoid this).
+- **`dreamzero` venv.** `VENV_NAME=dreamzero`; upstream `embodied-maniskill_libero` ships it, and `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero` (which ships the `dreamzero` venv); the build fails otherwise. It must be its own venv — layering `dreamzero.txt` onto another env hits an unsatisfiable `lerobot 0.3.3` vs `torchcodec 0.2` resolve (isolated venvs avoid this).
 - **Restricted `envsubst` everywhere.** Always `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` and other manifests still embed inline shell that unrestricted substitution would clobber. **This requires [a8m/envsubst](https://github.com/a8m/envsubst), not GNU gettext's `envsubst`** — the GNU binary ignores the allow-list argument and substitutes *every* `${...}`, mangling the inline shell. Verify with `envsubst --version` (expect `envsubst version: vX.Y.Z`, not `envsubst (GNU gettext-runtime)`).
 - **Generate `libero_sim` metadata** (stage 2) before SFT/eval — the DROID checkpoint only ships `oxe_droid` stats.
 - **`num_action_per_block=16`** must override the inherited DROID default of 24 (temporal-alignment assertion). The launcher and eval config both set this.
@@ -194,9 +196,11 @@ The authoritative, full list lives in [`examples/AGENTS.md`](../AGENTS.md) (Drea
 
 ## Results
 
+> Convergence reference run produced on RLinf v0.3. Revalidated on RLinf main@c70606f0 (2026-10) with a 20-step run on 2x p5en.48xlarge that exercised the full-size DCP save (16 shards, 223.7 GB apparent / ~207 GB on-disk `du`, the same size as the v0.3 checkpoint; 0 `UnpicklingError`), DCP → `.pt` convert, and the LIBERO simulator eval. Re-checked on main@d844e648 (2026-10-22, which carries upstream's DreamZero VAE/device changes) with the same 20-step SFT: RayJob `SUCCEEDED`, mean 6.81 s/step, 16-shard DCP (206.8 GB on disk), 0 `UnpicklingError`; convert and eval were not re-run. The 300-step convergence numbers below (0.232 → 0.085) are from the v0.3 run and were not re-run.
+
 **Infrastructure & pipeline** — validated **end-to-end** on 2x p5en.48xlarge: the KubeRay RayJob reached `SUCCEEDED`, a sharded FSDP2 DCP checkpoint was written, converted to a single `.pt` on CPU, and consumed by the LIBERO simulator eval (image build → multi-node EFA/NCCL → FSDP2 sharded checkpointing → DCP→`.pt` conversion → in-sim eval).
 
-**Training convergence** — a **300-step** SFT run on 2x p5en.48xlarge (16x H200, FSDP2 `full_shard` over EFA, ~6.9 s/step) reduced `train/loss` from **0.232 → 0.085** with a steady downward trend (`action_loss` and `dynamics_loss` both ~0.04–0.05 at the end). It wrote a **207 GB** sharded DCP checkpoint (16 shards + `.metadata`) with no corruption or save-time crashes — exercising the in-image checkpoint-save fix (`dcp-save-gloo-coordinator.patch`) at the full 16.48B-parameter scale. This demonstrates the pipeline *trains and converges*, not a converged policy: 300 steps is a short run (the released 14B checkpoint trained for 100K), so it is **not** a task-accuracy claim.
+**Training convergence** — a **300-step** SFT run on 2x p5en.48xlarge (16x H200, FSDP2 `full_shard` over EFA, ~6.9 s/step) reduced `train/loss` from **0.232 → 0.085** with a steady downward trend (`action_loss` and `dynamics_loss` both ~0.04–0.05 at the end). It wrote a **207 GB** (on-disk `du`; 223.7 GB apparent) sharded DCP checkpoint (16 shards + `.metadata`) with no corruption or save-time crashes, at the full 16.48B-parameter scale. (That v0.3 run used an in-image gloo-PG checkpoint-save patch for the torch 2.6 DCP finalization race; on main@c70606f0 the race does not reproduce on torch 2.11 and the patch was removed — see Troubleshooting.) This demonstrates the pipeline *trains and converges*, not a converged policy: 300 steps is a short run (the released 14B checkpoint trained for 100K), so it is **not** a task-accuracy claim.
 
 **Accuracy reference** — a checkpoint from a short run yields low `eval/success_once` (a 1-step checkpoint gives `0.0` — expected; it validates the eval machinery, not competence). For real accuracy, train longer: RLinf's own LIBERO-Spatial SFT of the **5B** WAM ([`RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000`](https://huggingface.co/RLinf/RLinf-DreamZero-WAN2.2-5B-LIBERO-SFT-Step18000)) reaches **~96.7% `success_once` by step 18000** ([RLinf docs](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/sft_dreamzero.html)), confirming the recipe converges with sufficient steps.
 
@@ -207,8 +211,8 @@ To run longer than the default: raise `runner.max_steps` (and set a checkpoint `
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Pods crash with `ray: command not found`, or inline `${...}` vars render empty | Manifest rendered with unrestricted `envsubst`, clobbering inline shell vars | Render manifests that embed shell with the **restricted** allow-list: `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. |
-| SFT crashes near checkpoint save: `UnpicklingError: invalid load key '\x00'`, after shards are written | `dcp.save`'s finalization broadcast runs over the default NCCL/CUDA PG and races with NCCL teardown at the end of a long write | Fixed by the in-image `dcp-save-gloo-coordinator.patch` (passes a gloo PG). If you still hit it, the **on-disk checkpoint is valid and convertible** — proceed to convert. |
-| Convert fails with `EOFError` / `inline_container.cc unexpected pos`, corrupt shards | FSx filled up during SFT; `torch.save` was truncated mid-write | Ensure **≥250 GB free** on FSx before SFT (a 14B DCP checkpoint is ~140–206 GB). Free space, re-run SFT. |
+| SFT crashes near checkpoint save: `UnpicklingError: invalid load key '\x00'`, after shards are written | History (torch 2.6 / RLinf v0.3): `dcp.save`'s finalization broadcast ran over the default NCCL/CUDA PG and raced with NCCL teardown at the end of a long write | The torch 2.6 NCCL finalization race (`UnpicklingError`) does not reproduce on torch 2.11 (main@c70606f0); the patch was removed (validated: 2x p5en, 16-shard 223.7 GB DCP save, 0 `UnpicklingError`, 2026-10). If you still hit it, the **on-disk checkpoint is valid and convertible** — proceed to convert. |
+| Convert fails with `EOFError` / `inline_container.cc unexpected pos`, corrupt shards | FSx filled up during SFT; `torch.save` was truncated mid-write | Ensure **≥250 GB free** on FSx before SFT (a 14B DCP checkpoint is ~207 GB on disk (223.7 GB apparent)). Free space, re-run SFT. |
 | SFT fails with `KeyError: embodiment_tag 'libero_sim' not found` | The DROID checkpoint only bundles `oxe_droid` metadata | Run the metadata-generation step to produce `/fsx/models/metadata-libero.json` before SFT/eval. |
 | Wrong schema / transform errors during metadata gen | Wrong dataset (`lerobot/libero` has a different `observation.state`/`action` schema) | The dataset **must** be `physical-intelligence/libero`. Re-stage. |
 | Forward-pass assertion `actions … != … // …` early in SFT/eval | `num_action_per_block` inherited the DROID default of 24 | Override `actor.model.num_action_per_block=16` (launcher and eval config already do this). |
@@ -219,14 +223,14 @@ To run longer than the default: raise `runner.max_steps` (and set a checkpoint `
 
 | Component | Version |
 |-----------|---------|
-| RLinf (upstream) | `0505431899574619da86f551bad70b71e0ea2177` (v0.3) |
+| RLinf (upstream) | `d844e6485d9c00da497b1e1980996fe36da6fb1c` (main 2026-10-22, post-v0.4) |
 | DreamZero / `groot` | `ab790c198fbc` |
-| EFA installer | 1.47.0 |
-| libfabric | 2.4.0 |
-| aws-ofi-nccl | 1.18.0 |
-| NCCL | v2.21.5-1 |
-| KubeRay / Ray | 1.6.0 / 2.55.1 |
-| PyTorch | 2.6.0+cu124 |
+| EFA installer | 1.50.0 |
+| libfabric | 2.6.0amzn1.0 |
+| aws-ofi-nccl | 1.21.1 |
+| NCCL | v2.31.2-1 |
+| KubeRay / Ray | 1.6.0 / 2.59.0 in the image (RayJob `rayVersion: "2.55.1"` field) |
+| PyTorch | 2.11.0+cu128 |
 
 ## File Layout
 

@@ -14,9 +14,11 @@ RLinf-specific test configurations for the validation harness (L2-L6). These com
 
 ## L2: Container Validation
 
-The container test (`infrastructure/manifests/container-test.yaml`) runs 10 tests verifying:
+The container test (`infrastructure/manifests/container-test.yaml`) runs 12 tests verifying:
 - Multi-venv availability (openvla, openvla-oft, openpi)
+- Example venv torch version (openvla-oft, openpi, dreamzero report torch `2.11.*`)
 - EFA libraries (libfabric, aws-ofi-nccl)
+- Comms stack versions (NCCL 2.31.2, aws-ofi-nccl 1.21.x + tuner, nccl-tests `all_reduce_perf`)
 - CUDA/GPU detection
 - RLinf framework imports (`import verl`, `from flash_attn import flash_attn_func`)
 - MuJoCo/ManiSkill rendering (`MUJOCO_GL=osmesa`)
@@ -79,7 +81,7 @@ The test patches `HYDRA_OVERRIDES` onto the StatefulSet for single-step validati
 
 ## Validation Checklist
 
-- [ ] L2 container test passes all 10 tests
+- [ ] L2 container test passes all 12 tests
 - [ ] L4 all 3 models downloaded and verified on FSx
 - [ ] L5 each example completes 1 training step without OOM or error
 - [ ] L6 multi-node Ray cluster forms and completes 1 training step (if 2+ GPU nodes)

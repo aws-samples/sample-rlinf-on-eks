@@ -208,7 +208,7 @@ resource "aws_iam_role_policy_attachment" "codebuild" {
 resource "aws_codebuild_project" "training" {
   name          = var.codebuild_project_name
   description   = "Build training container image for EKS deployment"
-  build_timeout = 60 # minutes
+  build_timeout = 90 # minutes (measured builds: 43-49 min)
   service_role  = aws_iam_role.codebuild.arn
 
   # checkov:skip=CKV_AWS_316: privileged_mode is REQUIRED. This project runs

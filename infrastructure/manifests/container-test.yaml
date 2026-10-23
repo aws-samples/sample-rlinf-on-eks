@@ -5,7 +5,8 @@
 #
 # Comprehensive test of the built RLinf container image.
 # Verifies CUDA/GPU, EFA, multi-venv pattern, EFA/NCCL libraries,
-# RLinf project structure, ManiSkill, FSx, Ray, and OpenMPI.
+# comms stack versions (NCCL, aws-ofi-nccl, nccl-tests), RLinf project
+# structure, ManiSkill, FSx, Ray, and OpenMPI.
 #
 # Architecture notes:
 #   - PyTorch is only in venvs (/opt/venv/<name>), NOT system Python
@@ -220,7 +221,47 @@ data:
             print(f"  {venv}: PyTorch {ver} [{status}]")
     run_test("Multi-Venv Pattern", test_venvs)
 
-    # Test 5: RLinf Project Structure
+    # Test 5: example venvs carry the pinned torch (main@d844e648 => 2.11.x)
+    def test_example_venv_torch():
+        expected_prefix = os.environ.get("EXPECTED_TORCH_PREFIX", "2.11.")
+        for venv in ["openvla-oft", "openpi", "dreamzero"]:
+            python = os.path.join(UV_PATH, venv, "bin", "python3")
+            assert os.path.exists(python), f"venv {venv} missing"
+            result = subprocess.run(
+                [python, "-c", "import torch; print(torch.__version__)"],
+                capture_output=True, text=True, timeout=120)
+            assert result.returncode == 0, \
+                f"{venv} torch import failed: {result.stderr[:120]}"
+            ver = result.stdout.strip()
+            print(f"  {venv}: torch {ver}")
+            assert ver.startswith(expected_prefix), \
+                f"{venv} torch {ver} != {expected_prefix}*"
+    run_test("Example Venv Torch Version", test_example_venv_torch)
+
+    # Test 6: comms stack versions match the pins
+    # (EFA installer 1.50.0 --disable-ngc => libnccl-ofi 1.21.1, NCCL 2.31.2, nccl-tests)
+    def test_comms_stack():
+        import glob, re
+        nccl = glob.glob("/opt/nccl/build/lib/libnccl.so.2.*")
+        assert any(os.path.basename(p).startswith("libnccl.so.2.31.2") for p in nccl), \
+            f"NCCL libs: {nccl}"
+        ofi = glob.glob("/opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so")
+        assert ofi, "aws-ofi-nccl plugin /opt/amazon/ofi-nccl/lib/libnccl-net-ofi.so not found"
+        tuner = "/opt/amazon/ofi-nccl/lib/libnccl-ofi-tuner.so"
+        assert os.path.exists(tuner), f"aws-ofi-nccl tuner {tuner} missing (NGC package installed?)"
+        with open(ofi[0], "rb") as f:
+            data = f.read()
+        # Binary embeds "NET/OFI Initializing aws-ofi-nccl 1.21.1"
+        m = re.search(rb"aws-ofi-nccl (1\.21\.\d+)", data)
+        print(f"  NCCL: {[os.path.basename(p) for p in nccl]}")
+        print(f"  ofi: {ofi[0]} -> {m.group(0).decode() if m else None}; tuner: {tuner}")
+        assert m, "aws-ofi-nccl version string 1.21.x not found in plugin binary"
+        nt = "/opt/nccl-tests/build/all_reduce_perf"
+        assert os.access(nt, os.X_OK), f"nccl-tests {nt} missing"
+        print(f"  OK: {nt}")
+    run_test("Comms Stack Versions", test_comms_stack)
+
+    # Test 7: RLinf Project Structure
     # The upstream build uses --no-install-project (rlinf package not installed).
     # We verify the project metadata and install script are present instead.
     def test_rlinf_project():
@@ -235,7 +276,7 @@ data:
         print(f"  OK: {install_sh}")
     run_test("RLinf Project Structure", test_rlinf_project)
 
-    # Test 6: ManiSkill3
+    # Test 8: ManiSkill3
     def test_maniskill():
         for venv in ["openvla", "openvla-oft"]:
             python = os.path.join(UV_PATH, venv, "bin", "python3")
@@ -252,7 +293,7 @@ data:
         raise RuntimeError("ManiSkill not found in any venv")
     run_test("ManiSkill3", test_maniskill)
 
-    # Test 7: EKS Scripts
+    # Test 9: EKS Scripts
     # Upstream source (examples/) is not baked into the image;
     # only EKS-specific scripts are COPY'd by our Stage 2 Dockerfile.
     def test_paths():
@@ -269,7 +310,7 @@ data:
         assert not missing, f"Missing files: {missing}"
     run_test("EKS Scripts", test_paths)
 
-    # Test 8: FSx Access
+    # Test 10: FSx Access
     def test_fsx():
         test_file = f"/fsx/container-test-{os.getpid()}"
         with open(test_file, "w") as f:
@@ -281,7 +322,7 @@ data:
         print("  FSx write/read/delete OK")
     run_test("FSx Access", test_fsx)
 
-    # Test 9: Ray
+    # Test 11: Ray
     def test_ray():
         for venv in ["openvla", "openvla-oft", "openpi"]:
             python = os.path.join(UV_PATH, venv, "bin", "python3")
@@ -297,7 +338,7 @@ data:
         raise RuntimeError("Ray not found in any venv")
     run_test("Ray", test_ray)
 
-    # Test 10: OpenMPI (for multi-node)
+    # Test 12: OpenMPI (for multi-node)
     def test_openmpi():
         result = subprocess.run(
             ["/opt/amazon/openmpi/bin/mpirun", "--version"],

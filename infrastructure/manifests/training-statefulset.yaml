@@ -138,6 +138,13 @@ spec:
               value: "8"
             - name: CKPT_PATH
               value: "/fsx/checkpoints"
+            # ManiSkill tasks load assets from here (not shipped in the image).
+            - name: MANISKILL_ASSET_DIR
+              value: "/fsx/assets/maniskill"
+            # OFT quickstart is is_lora=True with a placeholder lora_path.
+            # OFT-SPECIFIC default (the LoRA path): replace/clear it when CONFIG_NAME changes.
+            - name: HYDRA_OVERRIDES
+              value: "actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora"
             # --- Experiment Tracking (MLflow) ---
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.rlinf.svc.cluster.local"

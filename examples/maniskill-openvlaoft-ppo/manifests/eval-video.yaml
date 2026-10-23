@@ -7,21 +7,25 @@
 # contains ~170 real motion frames interleaved with 7 duplicate frames each (due to
 # num_action_chunks=8). Post-processing strips duplicates to produce smooth playback.
 #
-# Uses eval_embodied_agent.py (only_eval=True) with pipeline_stage_num=2 to match
+# Uses upstream evaluations/eval_embodied_agent.py (task_type=embodied_eval,
+# rollout + env workers only) with the training config and pipeline_stage_num=2 to match
 # the OpenVLA video layout (16 envs ÷ 4 GPUs ÷ 2 stages = 2 envs/stage → 7 tiles
 # via ManiSkill RecordVideo tiling after stage merge).
 #
 # Prerequisites:
 #   - Checkpoint on FSx (from training run)
 #   - Model weights at /fsx/models/openvla-oft-sft-libero10 (from model-download.yaml)
-#   - LoRA weights on FSx (produced during training)
+#   - Base LoRA adapter at /fsx/models/rlinf-openvlaoft-maniskill-base-lora
+#     (from model-download.yaml). It only supplies the PEFT structure; the
+#     trained LoRA weights come from full_weights.pt (runner.ckpt_path). At
+#     main@c70606f0 checkpoints hold only dcp_checkpoint/ + full_weights.pt.
 #   - ManiSkill assets at /fsx/assets/maniskill
 #
 # Usage:
 #   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
 #   export NAMESPACE=rlinf
 #   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
-#   export LORA_PATH=/fsx/checkpoints/<run>/.../lora_weights/
+#   export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
 #   ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
 #
 # Output:
@@ -106,21 +110,38 @@ spec:
               #
               # Post-processing required: strip duplicate frames (keep every 8th) to produce
               # a smooth video matching OpenVLA's frame-per-step format. See header comment.
-              python3 examples/embodiment/eval_embodied_agent.py \
-                --config-path config \
+              #
+              # Entrypoint: upstream evaluations/eval_embodied_agent.py (the old
+              # examples/embodiment/eval_embodied_agent.py was removed upstream in 2e1c99f7).
+              # It forces runner.task_type=embodied_eval and builds ONLY rollout + env
+              # workers from cfg.rollout.model / cfg.env.eval (no actor). Hydra's
+              # config_path is relative to evaluations/, so --config-path must be absolute.
+              # We keep the TRAINING config so model/env settings match training exactly:
+              #   'rollout.model=${actor.model}'  → the training config's rollout.model is a
+              #     stub (path+precision); embodied_eval requires a full spec (model_type,
+              #     num_action_chunks). Hydra interpolation (single-quoted for bash; envsubst
+              #     leaves it alone) makes rollout.model the exact training architecture
+              #     (value head + LoRA r=32), which runner.ckpt_path is strict-loaded into.
+              #   actor.model.model_path / lora_path → set on actor.model; rollout.model
+              #     mirrors them via the interpolation (rollout.model.* can't be overridden
+              #     on top of an interpolated node). LoRA is applied by get_model() on the
+              #     rollout model from rollout.model.lora_path.
+              #   env.eval.rollout_epoch=1  → replaces deprecated algorithm.eval_rollout_epoch
+              python3 evaluations/eval_embodied_agent.py \
+                --config-path /workspace/RLinf/examples/embodiment/config \
                 --config-name maniskill_ppo_openvlaoft \
                 runner.logger.log_path=/fsx/checkpoints/openvlaoft-eval-video \
                 runner.ckpt_path=${CKPT_PATH} \
+                'rollout.model=${actor.model}' \
                 actor.model.model_path=/fsx/models/openvla-oft-sft-libero10 \
                 actor.model.lora_path=${LORA_PATH} \
-                rollout.model.model_path=/fsx/models/openvla-oft-sft-libero10 \
                 rollout.pipeline_stage_num=2 \
                 rollout.enable_offload=True \
                 env.eval.enable_offload=True \
                 env.eval.total_num_envs=16 \
                 env.eval.max_steps_per_rollout_epoch=1360 \
                 env.eval.video_cfg.save_video=True \
-                algorithm.eval_rollout_epoch=1 \
+                env.eval.rollout_epoch=1 \
                 cluster.num_nodes=1
 
               echo "=== Eval complete. Videos at /fsx/checkpoints/openvlaoft-eval-video/video/ ==="
