@@ -47,10 +47,20 @@ LIBERO PPO examples additionally need: `LIBERO_DATASET_DIR=/fsx/datasets/libero`
 ## Critical Gotchas
 
 ### Container Build
+- **Image profiles (`PROFILE` CodeBuild env var; `examples/profiles.env`)**:
+  - `full` (default) = upstream `embodied-maniskill_libero` (13 venvs), tagged `<BUILD_TARGET>-<ts>` + `latest`. It is the **only** profile that pushes `:latest`.
+  - Other profiles build upstream `--target embodied-common-image` (still with `BUILD_TARGET=embodied-maniskill_libero`, which selects its base), then `examples/Dockerfile.profile` (one `install.sh` per `venv:model:env` tuple), then the same stage 2. They are tagged `<profile>-<ts>` + `<profile>-latest`, and write `/opt/venv/.profile` (one venv per line). The stage-2 DreamZero guard and L2 read that file.
+  - Profile images have **no default venv in `.bashrc`** (that came from upstream `final-image`), so set `VENV_NAME` explicitly.
+  - `ASSET_VENV` must be a profile venv with `mani_skill` + `hf`. `resolve_profile.sh` checks this.
+  - Every profile uses `--env maniskill_libero` to match the validated full image.
+  - Custom profile: `PROFILE=<name> INSTALLS="v:m:e ..."`.
+  - Re-check `embodied-common-image` and the `install.sh` options on every `UPSTREAM_REF` bump.
+- **Manifests take `${IMAGE}`** (full `<ecr repo>:<tag>`), not `${ECR_URI}:latest`. envsubst has no defaults, so an unset `IMAGE` renders `image: ` and the pod fails. `tests/lib/cluster.sh` derives `IMAGE=${ECR_URI}:${IMAGE_TAG:-latest}`.
 - **Two-stage build is required**: upstream RLinf Dockerfile handles 20 BUILD_TARGETs (reason + 19 embodied) with multi-venv (`uv`). Don't replicate -- build upstream first, layer EFA on top. See `examples/Dockerfile` and `examples/buildspec.yml`.
 - **`NO_MIRROR=1` build arg required** for upstream RLinf Dockerfile on CodeBuild (otherwise defaults to unreachable Chinese mirrors).
 - **Multi-venv pattern**: each model (openvla, openvla-oft, openpi, gr00t, dexbotic, dreamzero, ...; 13 venvs in `embodied-maniskill_libero`) gets its own venv via `uv`. Activated by `VENV_NAME` env var in the launch script (`examples/scripts/run_training_eks.sh`).
 - **Stage-1 build patches (`examples/scripts/upstream-build-patches/*.patch`)** are `git apply`'d to the upstream clone by buildspec pre_build (fail-fast). **None are currently needed** (the directory holds only `.gitkeep`). Patches are line-anchored to upstream files; re-check each one on every `UPSTREAM_REF` bump. History: `dexbotic-hub-cap.patch` (main@c70606f0) capped `huggingface-hub<1.0` in the dexbotic venv because unpinned gradio 6.29 → hub 2.x made the resolver backtrack to a tokenizers 0.10.3 sdist that needs Rust. Upstream #1663 (557ccda5) now installs dexbotic with `transformers==4.53.2` on the same line (which requires `huggingface-hub<1.0` and `tokenizers<0.22`), so the patch was dropped at main@d844e648.
+- **Wan overlay pins the openvla-oft venv's numpy** (`examples/Dockerfile`, `pip install -c` with `numpy==<installed>`). The overlay's deps are unpinned, and pandas 3.1.0 (2026-10-22) requires numpy>=2. Unconstrained, pip upgraded numpy 1.26.4 → 2.4.6, which broke tensorflow 2.15 / ml_dtypes (`ImportError: numpy.core.umath failed to import` in RolloutWorker init) for ManiSkill PPO and Wan GRPO. The build now fails if numpy changes.
 - **nccl-tests tag must match the NCCL version**: nccl-tests v2.21.0 (2026-10) calls `ncclCommWindowRegister(..., NCCL_WIN_GIN_ONLY)` in `src/device_api/gin/utils/gin_context.cc`; that flag first exists in NCCL v2.32.3, so with NCCL v2.31.2-1 stage 2 fails with `error: 'NCCL_WIN_GIN_ONLY' was not declared in this scope`. Pin nccl-tests v2.20.0 until NCCL is bumped to 2.32+.
 - **Full-node L3 (`nccl-allreduce-fullnode.yaml`) first-run behaviour**: the launcher log stays empty for ~1-2 min after all pods are Running -- the launcher's `ssh` (ConnectionAttempts=10) retries until the workers' headless-Service DNS resolves; `orted` then appears on both workers. Not a hang. The MPIJob takes ~3-4 min total with a cached image. aws-ofi-nccl 1.21 logs `Selected provider is efa` (lowercase `provider`); log parsers must match both cases.
 - **NCCL v2.31.2-1 on the CUDA 12.8.1 base**: aws-ofi-nccl 1.21.1 (EFA 1.50.0) is tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either. Known issue: NCCL 2.31.2 PAT+NVLS has a performance regression on H100; PAT is off by default, so do not set `NCCL_ALGO=PAT`.
@@ -83,7 +93,7 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
   `DREAMZERO_PATH=/workspace/DreamZero` on PYTHONPATH. The integration glue
   (`rlinf/models/embodiment/dreamzero/`, world-model env) is in-tree. Buildspec clones it.
 - **Multi-node uses a KubeRay `RayJob`** (embedded RayCluster: head 1 + worker 1), NOT torchrun and NOT a StatefulSet. The KubeRay operator starts Ray and runs the launcher (`run_dreamzero_sft_eks.sh`, Ray-agnostic) as the head `entrypoint`; there is no manual head election. `shutdownAfterJobFinishes: true` tears the cluster down on completion.
-- **Apply manifests with RESTRICTED envsubst**: `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` still embeds an inline `bash -c`; unrestricted envsubst would mangle it.
+- **Apply manifests with RESTRICTED envsubst**: `envsubst '${IMAGE} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` still embeds an inline `bash -c`; unrestricted envsubst would mangle it.
 - **PYTHONPATH unbound-variable trap**: every venv-activating context (launcher, Ray
   bootstrap, dreamzero-deps Dockerfile layer) must `export PYTHONPATH="${PYTHONPATH:-}"`
   BEFORE sourcing the venv; the activate script references PYTHONPATH under `set -u`.

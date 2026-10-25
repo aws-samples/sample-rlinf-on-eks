@@ -3,7 +3,7 @@
 #
 # Wan World Model GRPO: RL fine-tune OpenVLA-OFT on LIBERO-Spatial where the
 # environment is the Wan action-conditioned video world model (no physics sim).
-# Render with: envsubst '${ECR_URI} ${NAMESPACE}' | kubectl apply -f -
+# Render with: envsubst '${IMAGE} ${NAMESPACE}' | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -23,7 +23,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: training
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           imagePullPolicy: Always
           command: ["bash", "/workspace/eks/scripts/run_training_eks.sh"]
           env:

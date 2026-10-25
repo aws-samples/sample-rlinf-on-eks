@@ -57,16 +57,16 @@ Construct Kubernetes manifests for deploying RL training workloads on EKS. This 
 
 ## Single-Node Training Job
 
-The single-node Job runs the training script directly -- no init container is needed because the training script handles model preparation internally. The image URI uses `${ECR_URI}` which is substituted at deploy time via `envsubst`.
+The single-node Job runs the training script directly -- no init container is needed because the training script handles model preparation internally. The image reference uses `${IMAGE}` (`<ecr repo>:<tag>`), which is substituted at deploy time via `envsubst`.
 
 ```yaml
 # training-job.yaml
 #
 # Before applying, substitute the ECR image URI:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest
 #   envsubst < manifests/training-job.yaml | kubectl apply -f -
 #
-# Or manually replace ${ECR_URI} below.
+# Or manually replace ${IMAGE} below.
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -92,7 +92,7 @@ spec:
 
       containers:
         - name: training
-          image: ${ECR_URI}:latest  # Replace or use envsubst
+          image: ${IMAGE}  # Replace or use envsubst
           command:
             - bash
             - /workspace/eks/scripts/run_training_eks.sh  # Replace with your launch script
@@ -159,7 +159,7 @@ spec:
 | Decision | Rationale |
 |----------|-----------|
 | No init container | The training script (`<launch-script>`) handles checkpoint preparation internally, removing the need for a separate pre-step. |
-| `${ECR_URI}:latest` image | Uses `envsubst` at deploy time so the same manifest works across accounts/regions without editing. |
+| `${IMAGE}` image | Uses `envsubst` at deploy time so the same manifest works across accounts/regions without editing. |
 | `CONFIG_NAME`, `VENV_NAME`, `MODEL_PATH`, `EXPERIMENT_NAME` env vars | Parameterized so the same manifest works for different examples (swap values per experiment). |
 | EFA/NCCL env vars | `FI_PROVIDER=efa`, `FI_EFA_USE_DEVICE_RDMA=1`, `FI_EFA_FORK_SAFE=1` configure libfabric for RDMA; `TORCH_NCCL_AVOID_RECORD_STREAMS=1` reduces CUDA memory fragmentation. |
 
@@ -195,16 +195,16 @@ spec:
 
 ### StatefulSet
 
-The StatefulSet deploys N pods (one per GPU node). Pod-0 starts a Ray head, waits for all workers to connect, then launches the training script. Pod-1+ are Ray workers that connect to the head and block. The image URI uses `${ECR_URI}` substituted via `envsubst` at deploy time.
+The StatefulSet deploys N pods (one per GPU node). Pod-0 starts a Ray head, waits for all workers to connect, then launches the training script. Pod-1+ are Ray workers that connect to the head and block. The image reference uses `${IMAGE}` substituted via `envsubst` at deploy time.
 
 ```yaml
 # training-statefulset.yaml
 #
 # Before applying, substitute the ECR image URI:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest
 #   envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
 #
-# Or manually replace ${ECR_URI} below.
+# Or manually replace ${IMAGE} below.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -259,7 +259,7 @@ spec:
 
       containers:
         - name: training
-          image: ${ECR_URI}:latest  # Replace or use envsubst
+          image: ${IMAGE}  # Replace or use envsubst
           command:
             - bash
             - -c
@@ -379,7 +379,7 @@ spec:
 | Ray worker detection via `python3 -c 'import ray; ...'` | Counts connected Ray nodes programmatically with a 300-second timeout. More reliable than parsing `ray status` output with grep. |
 | No separate init container | The training script (`<launch-script>`) handles all setup internally via `VENV_NAME` and `CONFIG_NAME` env vars. |
 | Liveness probe on `ray status` | Detects Ray head crashes. The `|| exit 0` ensures workers (which do not run a head) do not get killed by the probe. `initialDelaySeconds: 120` gives Ray time to start before probing begins. |
-| `${ECR_URI}:latest` image | Same `envsubst` pattern as the single-node Job for account/region portability. |
+| `${IMAGE}` image | Same `envsubst` pattern as the single-node Job for account/region portability. |
 
 ## Supporting Resources
 
@@ -456,11 +456,11 @@ Physical AI RL container images are typically 15-20 GB compressed. Image pull ti
 
 ## Deployment
 
-All manifests use `${ECR_URI}` as a placeholder for the container image. Substitute it at deploy time with `envsubst`:
+All manifests use `${IMAGE}` (the full `<ecr repo>:<tag>`) as a placeholder for the container image. Substitute it at deploy time with `envsubst`:
 
 ```bash
-# Set your ECR image URI
-export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf  # Replace with your values
+# Set your image reference (full image; or :<profile>-latest for a slim profile image)
+export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest  # Replace with your values
 
 # Single-node
 envsubst < manifests/training-job.yaml | kubectl apply -f -

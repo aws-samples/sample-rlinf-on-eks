@@ -68,7 +68,11 @@ Options:
   -h, --help           Show this help
 
 Environment Variables:
-  ECR_URI              ECR image URI (auto-detected from terraform if not set)
+  ECR_URI              ECR repository URI (auto-detected from terraform if not set)
+  IMAGE                Full image reference used by manifests (default: ${ECR_URI}:${IMAGE_TAG})
+  IMAGE_TAG            Image tag (default: latest = full image; profiles: <profile>-latest)
+  PROFILE              L1 image profile to build (default: full; see examples/profiles.env)
+  REQUIRED_VENVS       L2: comma-separated venvs the image must ship (for profile images)
   CODEBUILD_PROJECT    CodeBuild project name (auto-detected)
   CODEBUILD_BUCKET     S3 bucket for CodeBuild source (auto-detected)
   NCCL_TEST_IMAGE      NCCL test container image (default: public ECR)

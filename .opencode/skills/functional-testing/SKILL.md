@@ -63,7 +63,7 @@ kubectl logs -f $(kubectl get pods | grep launcher | cut -d ' ' -f 1)
 On p5en.48xlarge, `validate.sh` L3 runs `nccl-allreduce-fullnode.yaml` instead: `all_reduce_perf` from the training image (nccl-tests v2.20.0, NCCL v2.31.2-1, aws-ofi-nccl 1.21.1), 2 workers x 8 GPU x 16 EFA, 8 B-16 GiB. Workers start sshd themselves; the launcher log stays empty for ~1-2 min until worker DNS resolves (not a hang).
 
 ```bash
-envsubst '${ECR_URI}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
+envsubst '${IMAGE}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
 kubectl -n rlinf logs -f $(kubectl -n rlinf get pods -o name | grep fullnode-launcher)
 ```
 
@@ -338,8 +338,8 @@ The repo includes `validate.sh`, a full validation harness that runs all levels:
 # Continue past failures
 ./validate.sh --mode cluster --continue-on-error
 
-# Override image URIs via environment variables
-ECR_URI=123456789.dkr.ecr.us-east-2.amazonaws.com/rlinf-on-eks/rlinf \
+# Override image URIs via environment variables (IMAGE_TAG or a full IMAGE for profile images)
+ECR_URI=123456789.dkr.ecr.us-east-2.amazonaws.com/rlinf-on-eks/rlinf IMAGE_TAG=latest \
   ./validate.sh --mode cluster --skip-to 2 --level 3
 ```
 

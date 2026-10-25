@@ -26,10 +26,21 @@ else
   _MANIFESTS_DIR="${MANIFESTS_DIR:-${REPO_ROOT}/manifests}"
 fi
 
+# --- Image reference ---
+# Manifests take a full image reference via ${IMAGE}. Default: the full image
+# (${ECR_URI}:latest). Profile images: IMAGE_TAG=<profile>-latest, or set IMAGE.
+set_image_ref() {
+  if [[ -z "${IMAGE:-}" ]] && [[ -n "${ECR_URI:-}" ]]; then
+    IMAGE="${ECR_URI}:${IMAGE_TAG:-latest}"
+  fi
+  export IMAGE
+}
+
 # --- Detect cluster configuration ---
-# Reads terraform outputs to set ECR_URI, CODEBUILD_PROJECT, etc.
+# Reads terraform outputs to set ECR_URI, CODEBUILD_PROJECT, etc., then IMAGE.
 detect_cluster_config() {
   if [[ -n "${ECR_URI:-}" ]]; then
+    set_image_ref
     return 0  # Already configured
   fi
 
@@ -50,8 +61,10 @@ detect_cluster_config() {
 
   export ECR_URI CODEBUILD_PROJECT CODEBUILD_BUCKET REGION
 
+  set_image_ref
   if [[ -n "$ECR_URI" ]]; then
     log_info "ECR_URI: $ECR_URI"
+    log_info "IMAGE: ${IMAGE}"
   fi
   if [[ -n "$CODEBUILD_PROJECT" ]]; then
     log_info "CodeBuild: $CODEBUILD_PROJECT"
@@ -123,9 +136,14 @@ run_level_1() {
   # Step 2: Start build
   log_info "Starting CodeBuild project: ${CODEBUILD_PROJECT}"
   local build_id
+  # PROFILE (default full) selects the image profile; see examples/profiles.env.
+  local profile="${PROFILE:-full}" moving_tag
+  if [[ "$profile" == "full" ]]; then moving_tag=latest; else moving_tag="${profile}-latest"; fi
+  log_info "Image profile: ${profile} (tag ${moving_tag})"
   build_id=$(aws codebuild start-build \
     --project-name "${CODEBUILD_PROJECT}" \
     --region "${REGION}" \
+    --environment-variables-override "name=PROFILE,value=${profile},type=PLAINTEXT" \
     --query 'build.id' --output text)
 
   if [[ -z "$build_id" ]]; then
@@ -168,9 +186,9 @@ run_level_1() {
   ecr_repo_name=$(echo "$ECR_URI" | sed 's|^[^/]*/||')
   if aws ecr describe-images \
        --repository-name "$ecr_repo_name" \
-       --image-ids imageTag=latest \
+       --image-ids "imageTag=${moving_tag}" \
        --region "${REGION}" >/dev/null 2>&1; then
-    log_pass "Container image built and pushed to ${ECR_URI}:latest"
+    log_pass "Container image built and pushed to ${ECR_URI}:${moving_tag}"
   else
     log_fail "Image not found in ECR after successful build"
     return 1
@@ -187,18 +205,20 @@ run_level_2() {
 
   detect_cluster_config
 
-  if [[ -z "${ECR_URI:-}" ]]; then
-    log_fail "ECR_URI required. Run L1 first or set ECR_URI."
+  if [[ -z "${IMAGE:-}" ]]; then
+    log_fail "IMAGE (or ECR_URI) required. Run L1 first or set ECR_URI / IMAGE."
     return 1
   fi
 
-  export ECR_URI
+  # REQUIRED_VENVS (optional): venvs a profile image must ship
+  export IMAGE REQUIRED_VENVS="${REQUIRED_VENVS:-}"
+  log_info "Image: ${IMAGE}"
 
   # Clean up any previous run
   cleanup_job container-test rlinf
   kubectl delete configmap container-test-script -n rlinf --ignore-not-found=true 2>/dev/null || true
 
-  # Apply (envsubst for ECR_URI)
+  # Apply (envsubst for IMAGE, REQUIRED_VENVS)
   envsubst < "${REPO_ROOT}/infrastructure/manifests/container-test.yaml" | kubectl apply -n rlinf -f -
 
   # Wait for completion
@@ -312,16 +332,16 @@ run_level_3() {
     job_ns=rlinf
     # Full-node run: large image pull + 8 B..16 GiB sweep; override with L3_TIMEOUT
     job_timeout=${L3_TIMEOUT:-1800}
-    if [[ -z "${ECR_URI:-}" ]]; then
-      log_fail "ECR_URI required for ${manifest}. Run L1 first or set ECR_URI."
+    if [[ -z "${IMAGE:-}" ]]; then
+      log_fail "IMAGE (or ECR_URI) required for ${manifest}. Run L1 first or set ECR_URI / IMAGE."
       return 1
     fi
-    export ECR_URI
-    log_info "NCCL test image: ${ECR_URI}:latest"
+    export IMAGE
+    log_info "NCCL test image: ${IMAGE}"
     cleanup_mpijob "$job_name" "$job_ns"
-    # Only substitute ECR_URI, not other $VARs (single quotes intentional)
+    # Only substitute IMAGE, not other $VARs (single quotes intentional)
     # shellcheck disable=SC2016
-    envsubst '${ECR_URI}' < "${_MANIFESTS_DIR}/${manifest}" | kubectl apply -f -
+    envsubst '${IMAGE}' < "${_MANIFESTS_DIR}/${manifest}" | kubectl apply -f -
   else
     job_name=nccl-tests
     job_ns=default
@@ -482,8 +502,8 @@ run_level_5() {
 
   detect_cluster_config
 
-  if [[ -z "${ECR_URI:-}" ]]; then
-    log_fail "ECR_URI required. Run L1 first or set ECR_URI."
+  if [[ -z "${IMAGE:-}" ]]; then
+    log_fail "IMAGE (or ECR_URI) required. Run L1 first or set ECR_URI / IMAGE."
     return 1
   fi
 
@@ -519,7 +539,7 @@ run_level_5() {
     export CONFIG_NAME="$config_name"
     export MODEL_PATH="$model_path"
     export EXTRA_OVERRIDES="$extra_overrides"
-    export ECR_URI
+    export IMAGE
 
     # Clean up any previous run
     cleanup_job "$job_name" rlinf
@@ -572,8 +592,8 @@ run_level_6() {
 
   detect_cluster_config
 
-  if [[ -z "${ECR_URI:-}" ]]; then
-    log_fail "ECR_URI required. Run L1 first or set ECR_URI."
+  if [[ -z "${IMAGE:-}" ]]; then
+    log_fail "IMAGE (or ECR_URI) required. Run L1 first or set ECR_URI / IMAGE."
     return 1
   fi
 
@@ -585,7 +605,7 @@ run_level_6() {
     return 2  # Return 2 for skip
   fi
 
-  export ECR_URI
+  export IMAGE
 
   # Clean up any previous run
   kubectl delete statefulset training -n rlinf --ignore-not-found=true 2>/dev/null || true

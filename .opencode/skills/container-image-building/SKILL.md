@@ -88,6 +88,16 @@ CodeBuild builds both stages. The buildspec clones the upstream framework repo, 
 
 See `examples/buildspec.yml` for the full buildspec.
 
+### Slim Images (Profiles)
+
+A multi-model upstream target makes one large image (RLinf `embodied-maniskill_libero`: 13 venvs, ~48 min, ~18.6 GB). Most deployments need only a few venvs. Instead of patching the upstream Dockerfile, build its **venv-free base target** and install only the needed (venv, model, env) tuples in a thin intermediate Dockerfile. Then apply the same Stage 2 overlay.
+
+- Keep the default (full) path byte-for-byte unchanged, and let only it move `:latest`. Slim images get their own `<profile>-latest` tag so they never replace the full image.
+- Record which venvs a slim image contains in the image itself (e.g. `/opt/venv/.profile`), and make guards and container tests read that file rather than a hardcoded venv list.
+- Give manifests one full image reference variable (`${IMAGE}` = `<repo>:<tag>`) and keep any default (e.g. `:latest`) in shell, because `envsubst` has no default values.
+
+> **Example (RLinf):** `PROFILE` env var on the CodeBuild run. `examples/profiles.env` defines `examples`, `maniskill-oft`, `libero-pi0` and `dreamzero`, or pass a custom `INSTALLS="venv:model:env ..."`. `examples/scripts/resolve_profile.sh` validates the input; `examples/Dockerfile.profile` runs upstream `requirements/install.sh` per tuple on top of `--target embodied-common-image`. See `examples/AGENTS.md` (Image profiles).
+
 ## Dependency Conflict Management
 
 > **This is the #1 container build issue for RL training workloads.** RL training stacks combine multiple frameworks (RL framework, model packages, simulation libraries, etc.) that each pin different PyTorch versions. Naive `pip install -e .` will silently downgrade or upgrade PyTorch, breaking CUDA compatibility with the base image.

@@ -15,7 +15,7 @@
 #   - Pre-trained model weights staged on FSx
 #
 # Before applying, substitute the ECR image URI:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
 apiVersion: apps/v1
 kind: StatefulSet
@@ -73,7 +73,7 @@ spec:
 
       containers:
         - name: training
-          image: ${ECR_URI}:latest  # Replace or use envsubst
+          image: ${IMAGE}  # Replace or use envsubst
           command:
             - bash
             - -c

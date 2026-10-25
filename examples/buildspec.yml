@@ -17,6 +17,12 @@
 #   - UPSTREAM_REPO: GitHub URL for the RLinf repository
 #   - UPSTREAM_REF: Git ref to checkout (tag, branch, or commit SHA)
 #   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-maniskill_libero)
+#   - PROFILE: Image profile (default: full). `full` = BUILD_TARGET as-is (13 venvs),
+#     tagged <BUILD_TARGET>-<ts> + latest (the only profile that pushes latest).
+#     Other profiles (examples/profiles.env) build upstream embodied-common-image +
+#     examples/Dockerfile.profile, tagged <PROFILE>-<ts> + <PROFILE>-latest.
+#   - INSTALLS / ASSETS / ASSET_VENV: optional overrides of a profile's venv:model:env
+#     tuples and asset download (a custom PROFILE name + INSTALLS = custom profile)
 #   - EXTRAS: Comma-separated list of extras to install (default: rlinf)
 #   - DREAMZERO_REPO: GitHub URL for the DreamZero (groot) package repo
 #   - DREAMZERO_REF: Git ref to checkout for DreamZero (tag, branch, or commit SHA)
@@ -24,11 +30,13 @@
 version: 0.2
 
 env:
+  shell: bash
   variables:
     ECR_REPO: "rlinf-on-eks/rlinf"
     UPSTREAM_REPO: "https://github.com/RLinf/RLinf.git"
     UPSTREAM_REF: "d844e6485d9c00da497b1e1980996fe36da6fb1c"  # RLinf main 2026-10-22 (post-v0.4; torch 2.11, CUDA 12.8)
     BUILD_TARGET: "embodied-maniskill_libero"
+    PROFILE: "full"
     EXTRAS: "rlinf"
     DREAMZERO_REPO: "https://github.com/RLinf/dreamzero.git"
     DREAMZERO_REF: "ab790c198fbc"
@@ -39,9 +47,13 @@ phases:
       - "echo === Pre-build phase ==="
       - "AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)"
       - "ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}"
-      - "IMAGE_TAG=${BUILD_TARGET}-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d-%H%M%S)}"
+      # Resolve PROFILE (examples/profiles.env) -> INSTALLS/ASSETS/ASSET_VENV + tag prefix; fails on bad input.
+      - "source examples/scripts/resolve_profile.sh && resolve_profile || exit 1"
+      - "IMAGE_TAG=${PROFILE_TAG_PREFIX}-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d-%H%M%S)}"
+      - "if [ \"$PROFILE\" = full ]; then MOVING_TAG=latest; else MOVING_TAG=${PROFILE}-latest; fi"
       - "echo ECR_URI=$ECR_URI"
-      - "echo IMAGE_TAG=$IMAGE_TAG"
+      - "echo PROFILE=$PROFILE IMAGE_TAG=$IMAGE_TAG MOVING_TAG=$MOVING_TAG"
+      - "echo \"INSTALLS=${INSTALLS:-full upstream $BUILD_TARGET} ASSETS=${ASSETS:-} ASSET_VENV=${ASSET_VENV:-}\""
       - "echo BUILD_TARGET=$BUILD_TARGET"
       - "echo EXTRAS=$EXTRAS"
       - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
@@ -56,19 +68,34 @@ phases:
   build:
     commands:
       - "echo === Stage 1: Build upstream RLinf image ==="
-      - "echo Building upstream image with BUILD_TARGET=$BUILD_TARGET..."
-      - "docker build --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg NO_MIRROR=1 -t rlinf-upstream-${BUILD_TARGET} -f RLinf/docker/Dockerfile RLinf/"
+      # full: upstream BUILD_TARGET as-is (13 venvs). Other profiles: upstream
+      # embodied-common-image (BUILD_TARGET still selects its base) + only the
+      # profile's venvs via examples/Dockerfile.profile.
+      - |
+        set -e
+        if [ "$PROFILE" = full ]; then
+          echo "Building upstream image with BUILD_TARGET=$BUILD_TARGET..."
+          docker build --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg NO_MIRROR=1 -t rlinf-upstream-${BUILD_TARGET} -f RLinf/docker/Dockerfile RLinf/
+          STAGE1_TARGET=$BUILD_TARGET
+        else
+          echo "Building upstream embodied-common-image (BUILD_TARGET=$BUILD_TARGET base)..."
+          docker build --target embodied-common-image --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg NO_MIRROR=1 -t rlinf-upstream-embodied-common -f RLinf/docker/Dockerfile RLinf/
+          echo "Building profile $PROFILE: $INSTALLS"
+          docker build --build-arg INSTALLS="$INSTALLS" --build-arg ASSETS="$ASSETS" --build-arg ASSET_VENV="$ASSET_VENV" -t rlinf-upstream-profile-${PROFILE} -f examples/Dockerfile.profile .
+          STAGE1_TARGET=profile-${PROFILE}
+        fi
+        set +e
       - "echo === Stage 2: Layer EFA networking overlay, EXTRAS=$EXTRAS ==="
       - "echo Building EKS overlay image..."
-      - "docker build --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg EXTRAS=$EXTRAS -t $ECR_URI:$IMAGE_TAG -t $ECR_URI:latest -f examples/Dockerfile ."
+      - "docker build --build-arg BUILD_TARGET=$STAGE1_TARGET --build-arg EXTRAS=$EXTRAS -t $ECR_URI:$IMAGE_TAG -t $ECR_URI:$MOVING_TAG -f examples/Dockerfile ."
 
   post_build:
     commands:
       - "echo === Post-build phase ==="
       - "docker push $ECR_URI:$IMAGE_TAG"
-      - "docker push $ECR_URI:latest"
-      - "echo Build complete. Image URI $ECR_URI:$IMAGE_TAG"
-      - "echo BUILD_TARGET=$BUILD_TARGET EXTRAS=$EXTRAS"
+      - "docker push $ECR_URI:$MOVING_TAG"
+      - "echo Build complete. Image URI $ECR_URI:$IMAGE_TAG, also tagged $ECR_URI:$MOVING_TAG"
+      - "echo PROFILE=$PROFILE BUILD_TARGET=$BUILD_TARGET EXTRAS=$EXTRAS"
 
 cache:
   paths:

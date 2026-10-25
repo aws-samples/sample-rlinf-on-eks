@@ -7,7 +7,7 @@
         <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="RLinf-on-EKS Container Anatomy (Two-Stage Build)" vertex="1">
           <mxGeometry height="30" width="500" x="350" y="10" as="geometry" />
         </mxCell>
-        <mxCell id="stage1_label" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Stage 1: Upstream RLinf main@d844e648 (docker/Dockerfile)" vertex="1">
+        <mxCell id="stage1_label" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Stage 1: Upstream RLinf main@d844e648 (docker/Dockerfile; PROFILE=full)" vertex="1">
           <mxGeometry height="20" width="350" x="50" y="50" as="geometry" />
         </mxCell>
         <mxCell id="stage2_label" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Stage 2: EFA Overlay (examples/Dockerfile)" vertex="1">
@@ -31,7 +31,7 @@
         <mxCell id="venv_openpi" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;openpi&lt;/b&gt;&lt;br&gt;PyTorch 2.11.0&lt;br&gt;Ray &gt;=2.47&lt;br&gt;LIBERO&lt;br&gt;robosuite 1.4.1&lt;br&gt;pi0 model deps" vertex="1">
           <mxGeometry height="80" width="120" x="274" y="30" as="geometry" />
         </mxCell>
-        <mxCell id="venv_other" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;+10 more (13 venvs total)&lt;/b&gt;&lt;br&gt;gr00t, gr00t_n1d6, gr00t_n1d7&lt;br&gt;dexbotic, starvla, abot_m0&lt;br&gt;dreamzero, molmoact2&lt;br&gt;evo1, fastwam" vertex="1">
+        <mxCell id="venv_other" parent="venvs" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;+10 more (13 venvs total, full)&lt;/b&gt;&lt;br&gt;gr00t, gr00t_n1d6, gr00t_n1d7&lt;br&gt;dexbotic, starvla, abot_m0&lt;br&gt;dreamzero, molmoact2&lt;br&gt;evo1, fastwam&lt;br&gt;&lt;i&gt;Slim PROFILE: only listed venvs&lt;/i&gt;" vertex="1">
           <mxGeometry height="80" width="140" x="404" y="30" as="geometry" />
         </mxCell>
         <mxCell id="venv_note" parent="venvs" style="text;html=1;align=left;fontSize=10;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Activated by:&amp;nbsp;&lt;/b&gt;&lt;div&gt;source /opt/venv/${VENV_NAME}/bin/activate&lt;br&gt;or: source switch_env openvla&lt;/div&gt;" vertex="1">
@@ -52,7 +52,7 @@
         <mxCell id="rlinf_key" parent="rlinf_src" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key Components&lt;/b&gt;&lt;br&gt;&lt;br&gt;EmbodiedRunner&lt;br&gt;EmbodiedFSDPActor&lt;br&gt;MultiStepRolloutWorker&lt;br&gt;EnvWorker&lt;br&gt;hybrid_engines config group&lt;br&gt;Macro-to-micro flow" vertex="1">
           <mxGeometry height="110" width="127.5" x="221" y="30" as="geometry" />
         </mxCell>
-        <mxCell id="dreamzero_src" parent="container" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/workspace/DreamZero/&lt;/b&gt; (groot package; requires embodied-maniskill_libero, which ships the dreamzero venv; build fails fast otherwise)&lt;br&gt;&lt;br&gt;Cloned by buildspec, on PYTHONPATH via DREAMZERO_PATH (not pip-installed here)&lt;br&gt;Wan2.1-I2V DiT + VAE + action head | trained with FSDP2 full_shard (not DeepSpeed)" vertex="1">
+        <mxCell id="dreamzero_src" parent="container" style="rounded=0;whiteSpace=wrap;html=1;fontSize=9;verticalAlign=top;dashed=1;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;/workspace/DreamZero/&lt;/b&gt; (groot package; needs the dreamzero venv: full image or a profile that lists it; build fails fast otherwise)&lt;br&gt;&lt;br&gt;Cloned by buildspec, on PYTHONPATH via DREAMZERO_PATH (not pip-installed here)&lt;br&gt;Wan2.1-I2V DiT + VAE + action head | trained with FSDP2 full_shard (not DeepSpeed)" vertex="1">
           <mxGeometry height="80" width="560" x="20" y="460" as="geometry" />
         </mxCell>
         <mxCell id="efa_stack" parent="container" style="swimlane;startSize=22;html=1;fontSize=11;fontStyle=1;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="EFA / NCCL Networking Stack (Stage 2)" vertex="1">

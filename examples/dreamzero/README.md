@@ -72,11 +72,11 @@ The KubeRay operator starts the Ray head and one worker, then runs the Ray-agnos
 
 ## Pipeline / Reproduce
 
-Six stages, each validated on EKS. Throughout: `NAMESPACE` is your cluster namespace (e.g. `rlinf`) and `ECR_URI` is the training image repo.
+Six stages, each validated on EKS. Throughout: `NAMESPACE` is your cluster namespace (e.g. `rlinf`) and `IMAGE` is the training image (`<ecr repo>:<tag>`).
 
 ```bash
 export NAMESPACE=rlinf
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 ```
 
 **Prerequisites:** an EKS cluster that can provision 2x p5en.48xlarge via Karpenter, an FSx for Lustre PVC `fsx-claim` bound at `/fsx` (plan **≥250 GB free** — a 14B FSDP DCP checkpoint is ~207 GB on disk (223.7 GB apparent)), and the `training-sa` ServiceAccount (all created by `infrastructure/deploy.sh`).
@@ -86,7 +86,7 @@ export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repositor
 DreamZero runs in the **`dreamzero` venv**. The image is built once from `BUILD_TARGET=embodied-maniskill_libero`, which at main@d844e648 ships 13 venvs, including `dreamzero`, plus the ManiSkill/openpi assets. `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero` (which ships the `dreamzero` venv); the build fails otherwise, so a single `:latest` image serves every example. The buildspec clones the external `groot` package from `github.com/RLinf/dreamzero.git` and puts it on `PYTHONPATH` via `DREAMZERO_PATH`. Both external repos are pinned in `examples/buildspec.yml`: `UPSTREAM_REF=d844e6485d9c00da497b1e1980996fe36da6fb1c` (RLinf main 2026-10-22, post-v0.4) and `DREAMZERO_REF=ab790c198fbc`.
 
 ```bash
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip \
   s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build \
@@ -107,7 +107,7 @@ kubectl logs -f job/model-download-dreamzero -n "$NAMESPACE"
 Then generate the `libero_sim` normalization metadata. The DreamZero-DROID checkpoint bundles `experiment_cfg/metadata.json` for `oxe_droid` **only**, so LIBERO SFT would fail with `KeyError: embodiment_tag 'libero_sim' not found` without this step. It runs in the training image (needs the RLinf toolkit + the `dreamzero` venv), hence **restricted** `envsubst`:
 
 ```bash
-envsubst '${ECR_URI} ${NAMESPACE}' \
+envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/generate-metadata.yaml | kubectl apply -f -
 kubectl logs -f job/generate-metadata-dreamzero -n "$NAMESPACE"
 # -> writes /fsx/models/metadata-libero.json
@@ -115,14 +115,14 @@ kubectl logs -f job/generate-metadata-dreamzero -n "$NAMESPACE"
 
 ### 3. Multi-node SFT (2x p5en.48xlarge)
 
-Create the launcher ConfigMap, then apply the RayJob with **restricted** `envsubst` (substitute *only* `${ECR_URI}` and `${NAMESPACE}`). The KubeRay operator elects the Ray head — there is no inline head-election bash — but the RayJob `entrypoint` still contains an inline `bash -c` block, so keep the restricted form to avoid expanding it:
+Create the launcher ConfigMap, then apply the RayJob with **restricted** `envsubst` (substitute *only* `${IMAGE}` and `${NAMESPACE}`). The KubeRay operator elects the Ray head — there is no inline head-election bash — but the RayJob `entrypoint` still contains an inline `bash -c` block, so keep the restricted form to avoid expanding it:
 
 ```bash
 kubectl -n "$NAMESPACE" create configmap dreamzero-sft-launcher \
   --from-file=run_dreamzero_sft_eks.sh=examples/dreamzero/scripts/run_dreamzero_sft_eks.sh \
   --dry-run=client -o yaml | kubectl apply -f -
 
-envsubst '${ECR_URI} ${NAMESPACE}' \
+envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
 kubectl logs -f -n "$NAMESPACE" job/dreamzero-sft
@@ -141,7 +141,7 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-convert-launcher \
   --from-file=convert_checkpoint.sh=examples/dreamzero/scripts/convert_checkpoint.sh \
   --dry-run=client -o yaml | kubectl apply -f -
 
-envsubst '${ECR_URI} ${NAMESPACE}' \
+envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/convert-checkpoint.yaml | kubectl apply -f -
 kubectl logs -f job/dreamzero-convert -n "$NAMESPACE"
 # -> .../global_step_1/actor/model_state_dict/full_weights.pt
@@ -162,7 +162,7 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-eval-config \
   --from-file=libero_spatial_eval_dreamzero_14b.yaml=examples/dreamzero/configs/libero_spatial_eval_dreamzero_14b.yaml \
   --dry-run=client -o yaml | kubectl apply -f -
 
-envsubst '${ECR_URI} ${NAMESPACE}' \
+envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/dreamzero-eval.yaml | kubectl apply -f -
 kubectl logs -f job/dreamzero-eval -n "$NAMESPACE"
 ```
@@ -187,7 +187,7 @@ A checkpoint from a short training run produces rollouts where the robot drifts 
 The authoritative, full list lives in [`examples/AGENTS.md`](../AGENTS.md) (DreamZero section). The ones you are most likely to hit:
 
 - **`dreamzero` venv.** `VENV_NAME=dreamzero`; upstream `embodied-maniskill_libero` ships it, and `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero` (which ships the `dreamzero` venv); the build fails otherwise. It must be its own venv — layering `dreamzero.txt` onto another env hits an unsatisfiable `lerobot 0.3.3` vs `torchcodec 0.2` resolve (isolated venvs avoid this).
-- **Restricted `envsubst` everywhere.** Always `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` and other manifests still embed inline shell that unrestricted substitution would clobber. **This requires [a8m/envsubst](https://github.com/a8m/envsubst), not GNU gettext's `envsubst`** — the GNU binary ignores the allow-list argument and substitutes *every* `${...}`, mangling the inline shell. Verify with `envsubst --version` (expect `envsubst version: vX.Y.Z`, not `envsubst (GNU gettext-runtime)`).
+- **Restricted `envsubst` everywhere.** Always `envsubst '${IMAGE} ${NAMESPACE}' < ...`. The Ray head-election bash is gone (the KubeRay operator handles it), but the RayJob `entrypoint` and other manifests still embed inline shell that unrestricted substitution would clobber. **This requires [a8m/envsubst](https://github.com/a8m/envsubst), not GNU gettext's `envsubst`** — the GNU binary ignores the allow-list argument and substitutes *every* `${...}`, mangling the inline shell. Verify with `envsubst --version` (expect `envsubst version: vX.Y.Z`, not `envsubst (GNU gettext-runtime)`).
 - **Generate `libero_sim` metadata** (stage 2) before SFT/eval — the DROID checkpoint only ships `oxe_droid` stats.
 - **`num_action_per_block=16`** must override the inherited DROID default of 24 (temporal-alignment assertion). The launcher and eval config both set this.
 - **FSx free space ≥250 GB.** A full filesystem truncates `torch.save` mid-write → `inline_container.cc unexpected pos` → corrupt, unreadable DCP shards (EOFError on convert).
@@ -210,7 +210,7 @@ To run longer than the default: raise `runner.max_steps` (and set a checkpoint `
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Pods crash with `ray: command not found`, or inline `${...}` vars render empty | Manifest rendered with unrestricted `envsubst`, clobbering inline shell vars | Render manifests that embed shell with the **restricted** allow-list: `envsubst '${ECR_URI} ${NAMESPACE}' < ...`. |
+| Pods crash with `ray: command not found`, or inline `${...}` vars render empty | Manifest rendered with unrestricted `envsubst`, clobbering inline shell vars | Render manifests that embed shell with the **restricted** allow-list: `envsubst '${IMAGE} ${NAMESPACE}' < ...`. |
 | SFT crashes near checkpoint save: `UnpicklingError: invalid load key '\x00'`, after shards are written | History (torch 2.6 / RLinf v0.3): `dcp.save`'s finalization broadcast ran over the default NCCL/CUDA PG and raced with NCCL teardown at the end of a long write | The torch 2.6 NCCL finalization race (`UnpicklingError`) does not reproduce on torch 2.11 (main@c70606f0); the patch was removed (validated: 2x p5en, 16-shard 223.7 GB DCP save, 0 `UnpicklingError`, 2026-10). If you still hit it, the **on-disk checkpoint is valid and convertible** — proceed to convert. |
 | Convert fails with `EOFError` / `inline_container.cc unexpected pos`, corrupt shards | FSx filled up during SFT; `torch.save` was truncated mid-write | Ensure **≥250 GB free** on FSx before SFT (a 14B DCP checkpoint is ~207 GB on disk (223.7 GB apparent)). Free space, re-run SFT. |
 | SFT fails with `KeyError: embodiment_tag 'libero_sim' not found` | The DROID checkpoint only bundles `oxe_droid` metadata | Run the metadata-generation step to produce `/fsx/models/metadata-libero.json` before SFT/eval. |

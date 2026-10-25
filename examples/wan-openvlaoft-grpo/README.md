@@ -114,9 +114,9 @@ kubectl logs -f job/model-download-wan-openvlaoft -n $NAMESPACE
 ### 2. Launch Training
 
 ```bash
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
-envsubst '${ECR_URI} ${NAMESPACE}' < examples/wan-openvlaoft-grpo/manifests/wan-openvlaoft-grpo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/wan-openvlaoft-grpo/manifests/wan-openvlaoft-grpo.yaml | kubectl apply -f -
 ```
 
 For a short smoke run, append `runner.max_steps=2` to the `HYDRA_OVERRIDES` value in the training manifest. Keep the shipped config's batch math intact (do not resize `total_num_envs`).
