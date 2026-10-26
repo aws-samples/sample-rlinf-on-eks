@@ -52,7 +52,7 @@ LIBERO PPO examples additionally need: `LIBERO_DATASET_DIR=/fsx/datasets/libero`
   - Other profiles build upstream `--target embodied-common-image` (still with `BUILD_TARGET=embodied-maniskill_libero`, which selects its base), then `examples/Dockerfile.profile` (one `install.sh` per `venv:model:env` tuple), then the same stage 2. They are tagged `<profile>-<ts>` + `<profile>-latest`, and write `/opt/venv/.profile` (one venv per line). The stage-2 DreamZero guard and L2 read that file.
   - Profile images have **no default venv in `.bashrc`** (that came from upstream `final-image`), so set `VENV_NAME` explicitly.
   - `ASSET_VENV` must be a profile venv with `mani_skill` + `hf`. `resolve_profile.sh` checks this.
-  - Every profile uses `--env maniskill_libero` to match the validated full image.
+  - Profiles use `--env maniskill_libero` (matches the validated full image), **except the LIBERO-only `libero-pi0` and `dreamzero`**, which use `--env libero` (no ManiSkill/SAPIEN, ~1.5 GB smaller; upstream documents `install.sh embodied --model dreamzero --env libero` for DreamZero SFT + LIBERO eval). Both are revalidated (pi0 PPO 5-step; DreamZero 2-node SFT + convert + LIBERO eval smoke).
   - Custom profile: `PROFILE=<name> INSTALLS="v:m:e ..."`.
   - Re-check `embodied-common-image` and the `install.sh` options on every `UPSTREAM_REF` bump.
 - **Manifests take `${IMAGE}`** (full `<ecr repo>:<tag>`), not `${ECR_URI}:latest`. envsubst has no defaults, so an unset `IMAGE` renders `image: ` and the pod fails. `tests/lib/cluster.sh` derives `IMAGE=${ECR_URI}:${IMAGE_TAG:-latest}`.

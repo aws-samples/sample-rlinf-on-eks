@@ -128,10 +128,10 @@ The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` tar
 | `full` (default) | all 13 | every example; the only profile tagged `:latest` | 49 min, 18.6 GB |
 | `examples` | `openvla-oft`, `openpi`, `dreamzero` | all four examples in this repo | 37 min, 15.5 GB |
 | `maniskill-oft` | `openvla-oft` | ManiSkill PPO, Wan GRPO | — |
-| `libero-pi0` | `openpi` | LIBERO π₀ PPO | 32 min, 14.5 GB |
-| `dreamzero` | `dreamzero` | DreamZero SFT / convert / eval | — |
+| `libero-pi0` | `openpi` (`--env libero`, no ManiSkill) | LIBERO π₀ PPO | 32 min, 13.1 GB |
+| `dreamzero` | `dreamzero` (`--env libero`, no ManiSkill) | DreamZero SFT / convert / eval | 31 min, 12.6 GB |
 
-Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~14.5 GB, and the main saving is build time.
+Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~12.5–13 GB, and the main saving is build time.
 
 ```bash
 # Build a profile (tagged <profile>-<timestamp> and <profile>-latest; never :latest)
