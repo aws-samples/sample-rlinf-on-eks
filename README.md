@@ -88,7 +88,7 @@ EOF
 $(terraform -chdir=infrastructure/cluster output -raw configure_kubectl)
 
 # 3. Build and push container image (~45-50 min via CodeBuild)
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 BUILD_ID=$(aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name) --query 'build.id' --output text)
 echo "Build started: $BUILD_ID"
@@ -101,7 +101,7 @@ envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-down
 kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 
 # 5. Validate container
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test -n rlinf
 
@@ -118,6 +118,43 @@ kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 # Full teardown (destroys everything in reverse layer order)
 ./infrastructure/deploy.sh --action destroy --layer all
 ```
+
+### Build a slim image (profiles)
+
+The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` target: 13 model venvs, ~48 min to build, ~18.6 GB. If you only need some of them, build a **profile** instead. A profile starts from upstream's venv-free `embodied-common-image` and installs only the venvs it lists ([`examples/profiles.env`](examples/profiles.env)). The EFA/NCCL overlay is the same as in the full image.
+
+| Profile | Venvs | Serves | Measured (CodeBuild, 2026-10) |
+|---|---|---|---|
+| `full` (default) | all 13 | every example; the only profile tagged `:latest` | 49 min, 18.6 GB |
+| `examples` | `openvla-oft`, `openpi`, `dreamzero` | all four examples in this repo | 37 min, 15.5 GB |
+| `maniskill-oft` | `openvla-oft` | ManiSkill PPO, Wan GRPO | — |
+| `libero-pi0` | `openpi` (`--env libero`, no ManiSkill) | LIBERO π₀ PPO | 32 min, 13.1 GB |
+| `dreamzero` | `dreamzero` (`--env libero`, no ManiSkill) | DreamZero SFT / convert / eval | 31 min, 12.6 GB |
+
+Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~12.5–13 GB, and the main saving is build time.
+
+```bash
+# Build a profile (tagged <profile>-<timestamp> and <profile>-latest; never :latest)
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name) \
+  --environment-variables-override name=PROFILE,value=examples,type=PLAINTEXT
+
+# Custom profile: name it and pass venv:model:env tuples (upstream requirements/install.sh)
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name) \
+  --environment-variables-override name=PROFILE,value=my-gr00t,type=PLAINTEXT \
+    'name=INSTALLS,value=gr00t_n1d7:gr00t_n1d7:maniskill_libero,type=PLAINTEXT'
+
+# Point manifests at the profile image
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):examples-latest
+```
+
+Manifests take the whole image reference in `${IMAGE}` (`<ecr repo>:<tag>`). Profile images have no default venv, so every manifest sets `VENV_NAME`. To validate a profile:
+
+```bash
+PROFILE=examples ./validate.sh --mode cluster --skip-to 1 --level 1            # build it
+IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
+  ./validate.sh --mode cluster --skip-to 2 --level 2                          # L2 on it
+```
+
 ---
 
 ## Training Examples

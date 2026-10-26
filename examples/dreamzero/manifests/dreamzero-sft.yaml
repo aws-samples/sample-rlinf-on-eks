@@ -28,12 +28,12 @@
 #   kubectl -n ${NAMESPACE} create configmap dreamzero-sft-launcher \
 #     --from-file=run_dreamzero_sft_eks.sh=examples/dreamzero/scripts/run_dreamzero_sft_eks.sh \
 #     --dry-run=client -o yaml | kubectl apply -f -
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/<repo>
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
-#   # RESTRICTED envsubst -- substitute ONLY ${ECR_URI} and ${NAMESPACE}.
+#   # RESTRICTED envsubst -- substitute ONLY ${IMAGE} and ${NAMESPACE}.
 #   # (The Ray head-election bash is gone, but keep this habit: other inline
 #   # shell snippets, e.g. the launcher copy, must not be expanded.)
-#   envsubst '${ECR_URI} ${NAMESPACE}' < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 ---
 apiVersion: ray.io/v1
 kind: RayJob
@@ -64,7 +64,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: ray-job-submitter
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           env:
             - name: PATH
               value: "/opt/venv/dreamzero/bin:/opt/amazon/openmpi/bin:/opt/amazon/efa/bin:/opt/gdrcopy/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -100,7 +100,7 @@ spec:
                   topologyKey: kubernetes.io/hostname
           containers:
             - name: ray-head
-              image: ${ECR_URI}:latest
+              image: ${IMAGE}
               env: &dreamzero_env
                 # KubeRay runs `ray start` as the container command (non-interactive,
                 # ~/.bashrc not sourced). `ray` lives in the dreamzero venv, so prepend
@@ -205,7 +205,7 @@ spec:
                     topologyKey: kubernetes.io/hostname
             containers:
               - name: ray-worker
-                image: ${ECR_URI}:latest
+                image: ${IMAGE}
                 env: *dreamzero_env
                 resources: *dreamzero_resources
                 volumeMounts: *dreamzero_mounts

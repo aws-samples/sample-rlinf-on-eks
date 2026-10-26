@@ -16,7 +16,7 @@
 #   - LIBERO dataset at /fsx/datasets/libero
 #
 # Usage:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
 #   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
 #   ./examples/scripts/generate-showcase-video.sh libero-pi0-ppo
@@ -59,7 +59,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: eval
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           command:
             - bash
             - -c

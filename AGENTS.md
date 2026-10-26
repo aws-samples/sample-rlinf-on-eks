@@ -40,12 +40,12 @@ $(terraform -chdir=infrastructure/cluster output -raw configure_kubectl)
 terraform fmt -check -recursive infrastructure/
 
 # CodeBuild container build
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 
-# Deploy K8s manifests (ECR_URI required for envsubst)
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+# Deploy K8s manifests (IMAGE = <ecr repo>:<tag> required for envsubst)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 ```
 
@@ -96,6 +96,7 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 - **Karpenter replaces managed GPU node groups**. GPU nodes are provisioned on-demand by Karpenter when training pods are pending. NodePool limits prevent runaway spending.
 
 ### Container Build (Universal)
+- **Image profiles**: `PROFILE=full` (default, 13 venvs, the only `:latest`) or a slim profile from `examples/profiles.env` (`examples`, `maniskill-oft`, `libero-pi0`, `dreamzero`, or custom `INSTALLS`). Profiles are tagged `<profile>-latest`. Manifests take `${IMAGE}` (`<ecr repo>:<tag>`). Details are in `examples/AGENTS.md`.
 - **CodeBuild needs ECR pull permission for DLC registry** (`763104351884.dkr.ecr.<region>.amazonaws.com`).
 - **CodeBuild `LOCAL` cache not supported for `BUILD_GENERAL1_2XLARGE`** -- use `NO_CACHE`.
 - **`CODEBUILD_RESOLVED_SOURCE_VERSION` is empty for S3 sources** -- buildspec falls back to timestamp tag.
@@ -110,7 +111,7 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 Full details + every gotcha in `examples/AGENTS.md`. Headlines:
 - **FSDP2 + KubeRay RayJob multi-node (NOT torchrun/DeepSpeed/StatefulSet)**. Runs from the unified image (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream) with `VENV_NAME=dreamzero`. `groot` is external via `DREAMZERO_PATH`.
 - **The `dreamzero` venv ships in upstream `embodied-maniskill_libero`** (13 venvs at main@c70606f0); `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise. One image serves all examples.
-- **Apply manifests with restricted envsubst** (`envsubst '${ECR_URI} ${NAMESPACE}'`) — the KubeRay operator handles Ray head election, but the RayJob entrypoint still embeds inline bash that unrestricted envsubst would clobber.
+- **Apply manifests with restricted envsubst** (`envsubst '${IMAGE} ${NAMESPACE}'`) — the KubeRay operator handles Ray head election, but the RayJob entrypoint still embeds inline bash that unrestricted envsubst would clobber.
 - **Hydra `+` prefix** for keys absent from the config struct (`metadata_json_path`, `save_full_model_weights`) -- SFT launcher only (`+actor.model.metadata_json_path`). Eval sets `rollout.model.metadata_json_path` with no `+` (it is in the eval struct).
 - **Generate `libero_sim` metadata** (DROID checkpoint bundles only `oxe_droid`) and override `num_action_per_block=16` (DROID default 24 breaks the LIBERO forward pass).
 - **Dataset is `physical-intelligence/libero`**, NOT `lerobot/libero` (schema differs).

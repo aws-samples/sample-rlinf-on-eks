@@ -11,7 +11,7 @@
 #   VENV_NAME     - e.g., openvla-oft, openpi
 #   CONFIG_NAME   - e.g., maniskill_ppo_openvlaoft_quickstart
 #   MODEL_PATH    - e.g., /fsx/models/openvla-oft-sft-libero10
-#   ECR_URI       - ECR image URI
+#   IMAGE         - Container image (<ecr repo>:<tag>)
 #
 # Usage:
 #   export EXAMPLE_NAME=maniskill-openvlaoft VENV_NAME=openvla-oft ...
@@ -43,7 +43,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: test
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           imagePullPolicy: Always
           command:
             - bash

@@ -18,7 +18,7 @@
 #
 # Prerequisites:
 #   - kubectl configured for the target cluster
-#   - ECR_URI, NAMESPACE, S3_BUCKET, and CKPT_PATH environment variables set
+#   - ECR_URI (or IMAGE=<repo>:<tag>), NAMESPACE, S3_BUCKET, and CKPT_PATH environment variables set
 #   - LORA_PATH also required for openvlaoft-ppo example: the base adapter
 #     /fsx/models/rlinf-openvlaoft-maniskill-base-lora (PEFT structure only;
 #     trained LoRA weights come from CKPT_PATH full_weights.pt)
@@ -80,8 +80,13 @@ for cmd in kubectl aws envsubst; do
   fi
 done
 
-if [[ -z "${ECR_URI:-}" ]]; then
-  log_fail "ECR_URI environment variable not set"
+# Manifests take a full image reference via IMAGE (default: ${ECR_URI}:latest).
+if [[ -z "${IMAGE:-}" ]] && [[ -n "${ECR_URI:-}" ]]; then
+  IMAGE="${ECR_URI}:${IMAGE_TAG:-latest}"
+fi
+export IMAGE
+if [[ -z "${IMAGE:-}" ]]; then
+  log_fail "IMAGE (or ECR_URI) environment variable not set"
   echo "  Set it with: export ECR_URI=\$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)"
   exit 1
 fi

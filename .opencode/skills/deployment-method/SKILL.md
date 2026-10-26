@@ -54,7 +54,7 @@ For initial development and iteration:
 
 ```bash
 # Upload source and trigger build
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."rlinf"')
 ```
@@ -72,8 +72,8 @@ docker push $ECR_URI:latest
 ### 2. Update Manifest and Deploy
 
 ```bash
-# Set ECR URI and deploy with envsubst
-export ECR_URI=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"')  # Replace with your reference name
+# Set the image reference (<ecr repo>:<tag>) and deploy with envsubst
+export IMAGE=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"'):latest  # or :<profile>-latest
 envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
 # Monitor
@@ -138,7 +138,7 @@ phases:
 
 ```bash
 # Upload source (only files needed by CodeBuild: Dockerfile, buildspec, scripts)
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."rlinf"')
 ```

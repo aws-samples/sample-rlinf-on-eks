@@ -24,8 +24,8 @@ Apply these after `infrastructure/deploy.sh --action apply --layer all` complete
 ## Usage
 
 ```bash
-# Set ECR_URI for manifests that reference the training container image
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+# Set IMAGE (<ecr repo>:<tag>) for manifests that reference the training container image
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 
 # L0: Infrastructure smoke test (no container image needed — uses NGC (NVIDIA GPU Cloud) PyTorch)
 kubectl apply -f infrastructure/manifests/smoke-test.yaml
@@ -43,7 +43,7 @@ export NCCL_TEST_IMAGE=public.ecr.aws/hpc-cloud/nccl-tests:cuda12.8.1-efa1.43.2-
 envsubst '${NCCL_TEST_IMAGE}' < infrastructure/manifests/nccl-tests-mpijob.yaml | kubectl apply -f -
 
 # L3 full-node (p5en.48xlarge): our image, 2 nodes x 8 GPU x 16 EFA
-envsubst '${ECR_URI}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
+envsubst '${IMAGE}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
 ```
 
 ### NCCL Test: Instance Type Configuration

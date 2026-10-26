@@ -7,7 +7,7 @@
 # What it tests:
 #   all_reduce_perf across 2 nodes x 8 GPUs x 16 EFA (p5en.48xlarge profile),
 #   using the exact NCCL / aws-ofi-nccl / libfabric stack baked into the
-#   training image (${ECR_URI}:latest -> /opt/nccl-tests/build/all_reduce_perf,
+#   training image (${IMAGE} -> /opt/nccl-tests/build/all_reduce_perf,
 #   built against /opt/nccl/build + /opt/amazon/openmpi). This is the L3
 #   bandwidth gate for p5en; nccl-tests-mpijob.yaml (public image, 1 GPU,
 #   1 EFA) remains the quick single-NIC smoke test.
@@ -22,8 +22,8 @@
 #   3. 2 free p5en.48xlarge nodes (8 GPU, 16 EFA each), labeled role=gpu-training
 #
 # Usage:
-#   export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
-#   envsubst '${ECR_URI}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # full image; or :<profile>-latest
+#   envsubst '${IMAGE}' < infrastructure/manifests/nccl-allreduce-fullnode.yaml | kubectl apply -f -
 #   kubectl logs -n rlinf -f $(kubectl get pods -n rlinf -o name \
 #     -l training.kubeflow.org/job-name=nccl-allreduce-fullnode,training.kubeflow.org/job-role=launcher)
 #   kubectl delete mpijob nccl-allreduce-fullnode -n rlinf
@@ -77,13 +77,13 @@ spec:
               operator: Exists
               effect: NoSchedule
           containers:
-            - image: ${ECR_URI}:latest
+            - image: ${IMAGE}
               imagePullPolicy: IfNotPresent
               name: nccl-allreduce-launcher
               env:
                 # NOTE: These env vars must survive envsubst without expansion.
                 # Use explicit absolute paths (no $VAR references); apply with
-                # restricted envsubst '${ECR_URI}'.
+                # restricted envsubst '${IMAGE}'.
                 - name: LD_LIBRARY_PATH
                   value: /opt/amazon/openmpi/lib:/opt/nccl/build/lib:/opt/amazon/efa/lib:/opt/amazon/ofi-nccl/lib:/opt/gdrcopy/lib:/usr/local/cuda/extras/CUPTI/lib64:/usr/local/lib
               resources:
@@ -164,7 +164,7 @@ spec:
                       app: nccl-allreduce-fullnode-worker
                   topologyKey: kubernetes.io/hostname
           containers:
-            - image: ${ECR_URI}:latest
+            - image: ${IMAGE}
               imagePullPolicy: IfNotPresent
               name: nccl-allreduce-worker
               # The training image has no sshd entrypoint (CMD is /bin/bash, no

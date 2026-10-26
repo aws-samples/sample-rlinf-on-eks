@@ -139,7 +139,7 @@ $(terraform -chdir=infrastructure/cluster output -raw configure_kubectl)
 
 # 3. Build container image via CodeBuild
 #    BUILD_TARGET defaults to embodied-maniskill_libero (covers all PPO examples)
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 
@@ -149,7 +149,7 @@ envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-down
 envsubst '${NAMESPACE}' < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
 
 # 5. Run container validation
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test
 

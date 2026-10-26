@@ -106,7 +106,7 @@ kubectl logs -f job/model-download-libero-pi0 -n $NAMESPACE
 ### 2. Launch Training
 
 ```bash
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
 envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 ```
@@ -122,7 +122,7 @@ kubectl logs -f job/rlinf-libero-pi0 -n $NAMESPACE
 The showcase video at the top of this README can be regenerated from any training checkpoint using the shared script:
 
 ```bash
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
 export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)
 export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt

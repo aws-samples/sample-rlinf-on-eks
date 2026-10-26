@@ -16,13 +16,13 @@
 #   - Training image built/pushed
 #
 # Usage (restricted envsubst protects the inline ${...} shell vars):
-#   export ECR_URI=<acct>.dkr.ecr.<region>.amazonaws.com/<repo>
+#   export IMAGE=<acct>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=dreamzero
 #   # Optionally override STEP (default global_step_1):
 #   kubectl -n $NAMESPACE create configmap dreamzero-convert-launcher \
 #     --from-file=convert_checkpoint.sh=examples/dreamzero/scripts/convert_checkpoint.sh \
 #     --dry-run=client -o yaml | kubectl apply -f -
-#   envsubst '${ECR_URI} ${NAMESPACE}' < examples/dreamzero/manifests/convert-checkpoint.yaml | kubectl apply -f -
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/convert-checkpoint.yaml | kubectl apply -f -
 ---
 apiVersion: batch/v1
 kind: Job
@@ -43,7 +43,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: convert
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           command: ["bash", "/opt/scripts/convert_checkpoint.sh"]
           env:
             - name: VENV_NAME

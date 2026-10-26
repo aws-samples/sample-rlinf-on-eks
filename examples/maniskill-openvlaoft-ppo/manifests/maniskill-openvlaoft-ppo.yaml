@@ -16,7 +16,7 @@
 #   - model-download.yaml completed (downloads openvla-oft-sft-libero10)
 #
 # Usage:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   envsubst < examples/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
@@ -47,7 +47,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: training
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           command:
             - bash
             - -c

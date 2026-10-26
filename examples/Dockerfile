@@ -8,8 +8,10 @@
 # This preserves upstream's dependency management (uv, multi-venv, install.sh)
 # while adding the AWS EFA stack that upstream doesn't include.
 #
-# The BUILD_TARGET arg selects which upstream image variant to build:
-#   - embodied-maniskill_libero  (ManiSkill + LIBERO, 13 model venvs)
+# The BUILD_TARGET arg selects which stage-1 image to layer on (tag
+# rlinf-upstream-${BUILD_TARGET}):
+#   - embodied-maniskill_libero  (ManiSkill + LIBERO, 13 model venvs; `full` profile)
+#   - profile-<name>             (slim image from examples/Dockerfile.profile)
 #   - embodied-robotwin          (RoboTwin, 3 model venvs)
 #   - embodied-calvin            (CALVIN, 2 model venvs)
 #   - embodied-metaworld         (MetaWorld, 2 model venvs)
@@ -215,8 +217,9 @@ COPY examples/scripts/ /workspace/eks/scripts/
 #
 # DreamZero note: the DreamZero `groot` package is provided by the
 # COPY DreamZero/ tree on PYTHONPATH (DREAMZERO_PATH). Its `dreamzero` venv ships
-# in upstream's embodied-maniskill_libero target; the build fails (guard below)
-# for a BUILD_TARGET that lacks it, so a single image serves every example.
+# in upstream's embodied-maniskill_libero target (the `full` profile); the guard
+# below fails a full build that lacks it. Profile builds (examples/Dockerfile.profile)
+# write ${UV_PATH}/.profile and only need dreamzero if they list it.
 #
 # Examples:
 #   --build-arg EXTRAS=rlinf                  (ManiSkill, LIBERO, pi0, DreamZero)
@@ -230,9 +233,16 @@ ARG EXTRAS="rlinf"
 COPY RLinf/ /workspace/RLinf/
 COPY DreamZero/ /workspace/DreamZero/
 
-# DreamZero runs in the `dreamzero` venv, which upstream's embodied-maniskill_libero
-# target ships. Fail fast if a different BUILD_TARGET lacks it.
-RUN test -d "${UV_PATH}/dreamzero" || { echo "ERROR: BUILD_TARGET lacks the dreamzero venv; use embodied-maniskill_libero"; exit 1; }
+# DreamZero runs in the `dreamzero` venv. Full image (no .profile): upstream's
+# embodied-maniskill_libero target ships it, so require it. Profile image: require
+# it only if the profile lists it.
+RUN if [ -f "${UV_PATH}/.profile" ]; then \
+        echo "Profile image; venvs: $(tr '\n' ' ' < "${UV_PATH}/.profile")"; \
+        if grep -qx dreamzero "${UV_PATH}/.profile" && [ ! -d "${UV_PATH}/dreamzero" ]; then \
+            echo "ERROR: profile lists dreamzero but ${UV_PATH}/dreamzero is missing"; exit 1; fi; \
+    else \
+        test -d "${UV_PATH}/dreamzero" || { echo "ERROR: BUILD_TARGET lacks the dreamzero venv; use embodied-maniskill_libero or a profile"; exit 1; }; \
+    fi
 
 # Wan world-model example deps overlay.
 # The wan-openvlaoft-grpo example runs in the `openvla-oft` venv (switch_env
@@ -242,13 +252,22 @@ RUN test -d "${UV_PATH}/dreamzero" || { echo "ERROR: BUILD_TARGET lacks the drea
 # Wan env imports `diffsynth` at load), then (2) install
 # requirements/embodied/models/wan.txt. venvs are isolated, so we add both to
 # the openvla-oft venv only. Idempotent.
+# numpy is pinned to the venv's existing version: these deps are unpinned, and
+# pandas>=3.1 (2026-10-22) requires numpy>=2, which pip would install over the
+# venv's numpy 1.26.x and break tensorflow 2.15 / ml_dtypes
+# (`numpy.core.umath failed to import`) for ManiSkill PPO and Wan GRPO.
 RUN if [ -d "${UV_PATH}/openvla-oft" ]; then \
         echo "Installing Wan world-model deps into openvla-oft venv..."; \
+        np_ver=$("${UV_PATH}/openvla-oft/bin/python" -c 'import numpy; print(numpy.__version__)') && \
+        echo "numpy==${np_ver}" > /tmp/wan-constraints.txt && \
+        echo "Constraining Wan deps to numpy==${np_ver}" && \
         git clone --depth 1 https://github.com/RLinf/diffsynth-studio.git /opt/diffsynth-studio && \
-        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir -e /opt/diffsynth-studio && \
-        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir \
+        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir -c /tmp/wan-constraints.txt -e /opt/diffsynth-studio && \
+        "${UV_PATH}/openvla-oft/bin/pip" install --no-cache-dir -c /tmp/wan-constraints.txt \
             safetensors sentencepiece protobuf modelscope ftfy pandas \
-            'deepspeed==0.18.4' seaborn; \
+            'deepspeed==0.18.4' seaborn && \
+        test "$("${UV_PATH}/openvla-oft/bin/python" -c 'import numpy; print(numpy.__version__)')" = "${np_ver}" && \
+        rm -f /tmp/wan-constraints.txt; \
     else \
         echo "openvla-oft venv absent; skipping Wan deps overlay."; \
     fi

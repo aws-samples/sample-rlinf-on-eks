@@ -8,7 +8,7 @@
 #
 # Usage:
 #   1. Upload source:
-#      zip -r rlinf-on-eks.zip examples/Dockerfile examples/buildspec.yml examples/scripts/
+#      zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 #      aws s3 cp rlinf-on-eks.zip s3://<codebuild_source_bucket>/rlinf-on-eks.zip
 #
 #   2. Trigger build:

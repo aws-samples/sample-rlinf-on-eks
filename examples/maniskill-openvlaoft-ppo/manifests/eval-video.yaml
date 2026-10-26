@@ -22,7 +22,7 @@
 #   - ManiSkill assets at /fsx/assets/maniskill
 #
 # Usage:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
 #   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
 #   export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
@@ -73,7 +73,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: eval
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           command:
             - bash
             - -c

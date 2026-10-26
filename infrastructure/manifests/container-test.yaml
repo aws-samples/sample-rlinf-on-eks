@@ -21,7 +21,7 @@
 #   - FSx PVC "fsx-claim" bound (for FSx access test)
 #
 # Usage:
-#   export ECR_URI=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   envsubst < manifests/container-test.yaml | kubectl apply -f -
 #   kubectl logs -f job/container-test
 apiVersion: batch/v1
@@ -48,7 +48,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: test
-          image: ${ECR_URI}:latest
+          image: ${IMAGE}
           imagePullPolicy: Always
           command: ["python3", "-u", "/tmp/test.py"]
           env:
@@ -58,6 +58,9 @@ spec:
               value: "0"
             - name: HF_HUB_DISABLE_TELEMETRY
               value: "1"
+            # Comma-separated venvs the image must ship (profile builds). Empty = no extra check.
+            - name: REQUIRED_VENVS
+              value: "${REQUIRED_VENVS}"
           resources:
             requests:
               nvidia.com/gpu: 1
@@ -120,6 +123,24 @@ data:
             print(f"FAIL: {name} -- {e}")
             FAIL += 1
 
+    def present_venvs():
+        """Venvs in this image: the profile list (UV_PATH/.profile) if present, else all."""
+        prof = os.path.join(UV_PATH, ".profile")
+        if os.path.exists(prof):
+            with open(prof) as f:
+                return [l.strip() for l in f if l.strip()]
+        return sorted(
+            d for d in os.listdir(UV_PATH)
+            if os.path.exists(os.path.join(UV_PATH, d, "bin", "activate")))
+
+    def ordered_venvs(preferred):
+        """Preferred venvs first (if present), then any other present venv."""
+        present = present_venvs()
+        return [v for v in preferred if v in present] + [v for v in present if v not in preferred]
+
+    # REQUIRED_VENVS (comma-separated): venvs this image must ship (e.g. a profile's list).
+    REQUIRED = [v for v in os.environ.get("REQUIRED_VENVS", "").split(",") if v]
+
     def find_venv_python(venv_names):
         for v in venv_names:
             p = os.path.join(UV_PATH, v, "bin", "python3")
@@ -142,8 +163,7 @@ data:
             "r = torch.mm(t, t); "
             "print('GPU matmul OK')"
         )
-        candidates = ["openvla", "openvla-oft", "openpi", "gr00t", "dexbotic"]
-        for venv in candidates:
+        for venv in ordered_venvs(["openvla", "openvla-oft", "openpi", "gr00t", "dexbotic"]):
             python = os.path.join(UV_PATH, venv, "bin", "python3")
             if not os.path.exists(python):
                 continue
@@ -208,6 +228,14 @@ data:
         ])
         print(f"  Available venvs: {venvs}")
         assert len(venvs) > 0, "No venvs found"
+        prof = os.path.join(UV_PATH, ".profile")
+        if os.path.exists(prof):
+            listed = present_venvs()
+            print(f"  Profile image; .profile lists: {listed}")
+            missing = [v for v in listed if v not in venvs]
+            assert not missing, f".profile lists venvs that are missing: {missing}"
+        missing_req = [v for v in REQUIRED if v not in venvs]
+        assert not missing_req, f"REQUIRED_VENVS missing: {missing_req}"
         assert os.path.exists("/usr/local/bin/switch_env"), "switch_env not found"
         print("  switch_env utility present")
         for venv in venvs[:3]:
@@ -221,10 +249,15 @@ data:
             print(f"  {venv}: PyTorch {ver} [{status}]")
     run_test("Multi-Venv Pattern", test_venvs)
 
-    # Test 5: example venvs carry the pinned torch (main@d844e648 => 2.11.x)
+    # Test 5: example venvs carry the pinned torch (main@d844e648 => 2.11.x).
+    # Full image: all three example venvs must exist. Profile image: check those present.
     def test_example_venv_torch():
         expected_prefix = os.environ.get("EXPECTED_TORCH_PREFIX", "2.11.")
-        for venv in ["openvla-oft", "openpi", "dreamzero"]:
+        example_venvs = ["openvla-oft", "openpi", "dreamzero"]
+        is_profile = os.path.exists(os.path.join(UV_PATH, ".profile"))
+        to_check = [v for v in example_venvs if v in present_venvs()] if is_profile else example_venvs
+        assert to_check, "profile ships none of the example venvs (openvla-oft/openpi/dreamzero)"
+        for venv in to_check:
             python = os.path.join(UV_PATH, venv, "bin", "python3")
             assert os.path.exists(python), f"venv {venv} missing"
             result = subprocess.run(
@@ -278,7 +311,12 @@ data:
 
     # Test 8: ManiSkill3
     def test_maniskill():
-        for venv in ["openvla", "openvla-oft"]:
+        present = present_venvs()
+        if os.path.exists(os.path.join(UV_PATH, ".profile")) and \
+                not any(v in present for v in ["openvla", "openvla-oft"]):
+            print("  SKIP: profile ships no openvla/openvla-oft venv (ManiSkill not expected)")
+            return
+        for venv in ordered_venvs(["openvla", "openvla-oft"]):
             python = os.path.join(UV_PATH, venv, "bin", "python3")
             if not os.path.exists(python):
                 continue
@@ -324,7 +362,7 @@ data:
 
     # Test 11: Ray
     def test_ray():
-        for venv in ["openvla", "openvla-oft", "openpi"]:
+        for venv in ordered_venvs(["openvla", "openvla-oft", "openpi"]):
             python = os.path.join(UV_PATH, venv, "bin", "python3")
             if not os.path.exists(python):
                 continue

@@ -159,9 +159,9 @@ Key outputs: `ecr_repository_url`, `codebuild_project_name`, `codebuild_source_b
 | `training-statefulset.yaml` | StatefulSet | Multi-node training (L6 validation) | L6 |
 | `training-service.yaml` | Service (headless) | DNS rendezvous for multi-node training | L6 |
 
-Deploy validation manifests with `envsubst` (requires `ECR_URI`):
+Deploy validation manifests with `envsubst` (requires `IMAGE`, the full `<ecr repo>:<tag>`):
 ```bash
-export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 ```
 
