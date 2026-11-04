@@ -1,0 +1,7 @@
+# Validate the isaaclab-gr00t image (Isaac Sim baked in at /opt/isaacsim) on one g7e/g6e node:
+# Isaac Sim smoke test, container test (L2), then 2 PPO steps. Prerequisite: the isaaclab-smoke
+# ConfigMap (kubectl -n rlinf create configmap isaaclab-smoke --from-file=isaaclab_smoke.py=...).
+# name|gpus|max_steps|val_check_interval|families|extra
+val-smoke|1|0|0|g7e,g6e|manifest=examples/isaaclab-gr00t-ppo/manifests/isaaclab-smoke.yaml
+val-l2|1|0|0|g7e,g6e|manifest=infrastructure/manifests/container-test.yaml
+val-4gpu-b64|4|2|-1|g7e,g6e|actor.micro_batch_size=64

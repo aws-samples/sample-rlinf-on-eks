@@ -1,0 +1,5 @@
+# IsaacLab GR00T PPO on 4-GPU g6e (L40S): batch 64, batch 128, then 5 steps + eval.
+# name|gpus|max_steps|val_check_interval|families|extra
+g6e-4gpu-b64|4|2|-1|g6e|actor.micro_batch_size=64
+g6e-4gpu-b128|4|2|-1|g6e|actor.micro_batch_size=128
+g6e-4gpu-b64-eval|4|5|5|g6e|actor.micro_batch_size=64

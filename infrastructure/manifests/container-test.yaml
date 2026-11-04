@@ -61,7 +61,12 @@ spec:
             # Comma-separated venvs the image must ship (profile builds). Empty = no extra check.
             - name: REQUIRED_VENVS
               value: "${REQUIRED_VENVS}"
+            - name: EXPECT_EFA
+              value: "1"
           resources:
+            # EFA is requested for the p-class pool. For a node without EFA (the gpu-sim
+            # pool: g6e/g7e attach none), remove both vpc.amazonaws.com/efa lines and set
+            # EXPECT_EFA=0; the EFA device test then skips (EFA libraries are still checked).
             requests:
               nvidia.com/gpu: 1
               vpc.amazonaws.com/efa: 1
@@ -183,6 +188,9 @@ data:
 
     # Test 2: EFA Device
     def test_efa():
+        if os.environ.get("EXPECT_EFA", "1") == "0":
+            print("  SKIP: EXPECT_EFA=0 (node pool without EFA, e.g. gpu-sim)")
+            return
         ib_path = pathlib.Path("/sys/class/infiniband")
         devices = list(ib_path.iterdir()) if ib_path.exists() else []
         assert len(devices) > 0, "No EFA devices in /sys/class/infiniband/"
@@ -251,13 +259,21 @@ data:
 
     # Test 5: example venvs carry the pinned torch (main@d844e648 => 2.11.x).
     # Full image: all three example venvs must exist. Profile image: check those present.
+    # The isaaclab gr00t venv also has torch 2.11 (Isaac Sim's bundled torch 2.7 is only
+    # on PYTHONPATH after setup_conda_env.sh, and run_training_eks.sh removes it).
     def test_example_venv_torch():
-        expected_prefix = os.environ.get("EXPECTED_TORCH_PREFIX", "2.11.")
+        default_prefix = os.environ.get("EXPECTED_TORCH_PREFIX", "2.11.")
+        per_venv = {"gr00t": os.environ.get("EXPECTED_TORCH_PREFIX_ISAACLAB", default_prefix)} \
+            if os.path.isdir("/opt/envs/isaaclab") else {}
         example_venvs = ["openvla-oft", "openpi", "dreamzero"]
         is_profile = os.path.exists(os.path.join(UV_PATH, ".profile"))
-        to_check = [v for v in example_venvs if v in present_venvs()] if is_profile else example_venvs
-        assert to_check, "profile ships none of the example venvs (openvla-oft/openpi/dreamzero)"
+        if is_profile:
+            to_check = [v for v in example_venvs + list(per_venv) if v in present_venvs()]
+        else:
+            to_check = example_venvs
+        assert to_check, "profile ships none of the known example venvs"
         for venv in to_check:
+            expected_prefix = per_venv.get(venv, default_prefix)
             python = os.path.join(UV_PATH, venv, "bin", "python3")
             assert os.path.exists(python), f"venv {venv} missing"
             result = subprocess.run(
@@ -266,7 +282,7 @@ data:
             assert result.returncode == 0, \
                 f"{venv} torch import failed: {result.stderr[:120]}"
             ver = result.stdout.strip()
-            print(f"  {venv}: torch {ver}")
+            print(f"  {venv}: torch {ver} (expect {expected_prefix}*)")
             assert ver.startswith(expected_prefix), \
                 f"{venv} torch {ver} != {expected_prefix}*"
     run_test("Example Venv Torch Version", test_example_venv_torch)

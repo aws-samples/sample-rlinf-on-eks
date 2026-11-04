@@ -163,7 +163,8 @@ RUN git clone -b ${NCCL_VERSION} https://github.com/NVIDIA/nccl.git /opt/nccl &&
                   -gencode=arch=compute_86,code=sm_86 \
                   -gencode=arch=compute_89,code=sm_89 \
                   -gencode=arch=compute_90,code=sm_90 \
-                  -gencode=arch=compute_100,code=sm_100"
+                  -gencode=arch=compute_100,code=sm_100 \
+                  -gencode=arch=compute_120,code=sm_120"
 
 # nccl-tests built against OUR NCCL + Amazon OpenMPI, so L3 measures this image's
 # exact NCCL/aws-ofi-nccl/EFA stack (not a third-party image).

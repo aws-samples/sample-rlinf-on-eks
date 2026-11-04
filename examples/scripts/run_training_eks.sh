@@ -65,6 +65,36 @@ fi
 echo "Python: $(which python3)"
 echo "PyTorch: $(python3 -c 'import torch; print(torch.__version__)' 2>/dev/null || echo 'not found')"
 
+# --- Isaac Sim (optional): IsaacLab examples set ISAAC_PATH to a standalone Isaac Sim
+# install. ISAAC_PATH=auto picks the copy baked into the image (/opt/isaacsim, built with
+# ISAAC_SIM_VERSION) and falls back to the FSx-staged one (/fsx/isaacsim/5.1.0). Its setup
+# script adds Isaac Sim's Python packages/libs on top of the active venv.
+if [ "${ISAAC_PATH:-}" = auto ]; then
+    if [ -f /opt/isaacsim/setup_conda_env.sh ]; then ISAAC_PATH=/opt/isaacsim; else ISAAC_PATH=/fsx/isaacsim/5.1.0; fi
+    echo "ISAAC_PATH=auto -> ${ISAAC_PATH}"
+fi
+if [ -n "${ISAAC_PATH:-}" ]; then
+    if [ ! -f "${ISAAC_PATH}/setup_conda_env.sh" ]; then
+        echo "ERROR: ISAAC_PATH=${ISAAC_PATH} has no setup_conda_env.sh. Build the image with ISAAC_SIM_VERSION, or run stage-isaacsim.yaml."
+        exit 1
+    fi
+    echo "Sourcing Isaac Sim env: ${ISAAC_PATH}"
+    pushd "${ISAAC_PATH}" >/dev/null
+    # set +x: the Isaac Sim env script prints hundreds of trace lines under set -x.
+    set +ux
+    # shellcheck disable=SC1091
+    source ./setup_conda_env.sh
+    set -ux
+    popd >/dev/null
+    # Isaac Sim prepends its own bundled torch (exts/omni.isaac.ml_archive/pip_prebundle,
+    # torch 2.7) to PYTHONPATH. That shadows the venv's torch, which flash-attn and RLinf
+    # are built against (undefined-symbol errors in flash_attn_2_cuda). Drop it so torch
+    # resolves from the venv.
+    PYTHONPATH=$(echo "${PYTHONPATH:-}" | tr ':' '\n' | { grep -v 'omni.isaac.ml_archive/pip_prebundle' || true; } | paste -sd: -)
+    export PYTHONPATH
+    echo "torch after Isaac Sim env: $(python3 -c 'import torch; print(torch.__version__, torch.__file__)' 2>&1 | tail -1)"
+fi
+
 # --- Environment (defaults set in Dockerfile, override via pod spec) ---
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"

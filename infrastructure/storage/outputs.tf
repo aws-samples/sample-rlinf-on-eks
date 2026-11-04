@@ -6,6 +6,11 @@ output "fsx_filesystem_id" {
   value       = aws_fsx_lustre_file_system.training.id
 }
 
+output "fsx_az" {
+  description = "AZ of the FSx filesystem; the GPU NodePools are pinned here"
+  value       = data.aws_subnet.fsx.availability_zone
+}
+
 output "fsx_mount_name" {
   description = "FSx for Lustre mount name"
   value       = aws_fsx_lustre_file_system.training.mount_name

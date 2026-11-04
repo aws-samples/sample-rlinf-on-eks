@@ -17,6 +17,10 @@
 #   - UPSTREAM_REPO: GitHub URL for the RLinf repository
 #   - UPSTREAM_REF: Git ref to checkout (tag, branch, or commit SHA)
 #   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-maniskill_libero)
+#   - FLASH_ATTN_ARCHS (profiles only): rebuild flash-attn for these archs, e.g. "8.0;9.0;10.0;12.0"
+#     (needed on Blackwell RTX, sm_120: the prebuilt wheel ships sm_80 + sm_90 only). FLASH_ATTN_MAX_JOBS (default 6).
+#   - ISAAC_SIM_VERSION + ACCEPT_ISAAC_SIM_EULA=Y (profiles only): bake Isaac Sim standalone into
+#     /opt/isaacsim (~19 GB). Setting ACCEPT_ISAAC_SIM_EULA=Y accepts the NVIDIA Isaac Sim license.
 #   - PROFILE: Image profile (default: full). `full` = BUILD_TARGET as-is (13 venvs),
 #     tagged <BUILD_TARGET>-<ts> + latest (the only profile that pushes latest).
 #     Other profiles (examples/profiles.env) build upstream embodied-common-image +
@@ -81,7 +85,8 @@ phases:
           echo "Building upstream embodied-common-image (BUILD_TARGET=$BUILD_TARGET base)..."
           docker build --target embodied-common-image --build-arg BUILD_TARGET=$BUILD_TARGET --build-arg NO_MIRROR=1 -t rlinf-upstream-embodied-common -f RLinf/docker/Dockerfile RLinf/
           echo "Building profile $PROFILE: $INSTALLS"
-          docker build --build-arg INSTALLS="$INSTALLS" --build-arg ASSETS="$ASSETS" --build-arg ASSET_VENV="$ASSET_VENV" -t rlinf-upstream-profile-${PROFILE} -f examples/Dockerfile.profile .
+          df -h / /var/lib/docker 2>/dev/null || df -h /
+          docker build --build-arg INSTALLS="$INSTALLS" --build-arg ASSETS="$ASSETS" --build-arg ASSET_VENV="$ASSET_VENV" --build-arg FLASH_ATTN_ARCHS="${FLASH_ATTN_ARCHS:-}" --build-arg FLASH_ATTN_MAX_JOBS="${FLASH_ATTN_MAX_JOBS:-6}" --build-arg ISAAC_SIM_VERSION="${ISAAC_SIM_VERSION:-}" --build-arg ACCEPT_ISAAC_SIM_EULA="${ACCEPT_ISAAC_SIM_EULA:-}" -t rlinf-upstream-profile-${PROFILE} -f examples/Dockerfile.profile .
           STAGE1_TARGET=profile-${PROFILE}
         fi
         set +e

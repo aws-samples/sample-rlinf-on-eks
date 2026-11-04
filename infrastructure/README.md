@@ -70,9 +70,9 @@ Key outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_
 
 ### storage/
 
-FSx for Lustre (PERSISTENT_2, SSD (Solid-State Drive)) with S3 Data Repository Association for auto-import/export. Creates PersistentVolume and PersistentVolumeClaim for pod mounting at `/fsx`.
+FSx for Lustre (PERSISTENT_2, SSD (Solid-State Drive)) with S3 Data Repository Association for auto-import/export. Creates PersistentVolume and PersistentVolumeClaim for pod mounting at `/fsx`. FSx is placed in `fsx_az` (default: the cluster's `target_az`); set `TF_VAR_fsx_az=<az>` to move it next to GPU capacity. That re-creates only FSx, its data-repository association, the PV and the PVC (data refills from S3); system nodes stay in `target_az`.
 
-Key outputs: `fsx_filesystem_id`, `fsx_mount_name`, `fsx_dns_name`, `s3_bucket_name`, `s3_bucket_arn`.
+Key outputs: `fsx_filesystem_id`, `fsx_az`, `fsx_mount_name`, `fsx_dns_name`, `s3_bucket_name`, `s3_bucket_arn`.
 
 ### addons/
 
@@ -131,6 +131,11 @@ Configuration (via `infrastructure/workloads/terraform.tfvars`):
 | `capacity_reservation_selector` | `[]` | Reservation ID or tags; required when using `reserved` |
 | `gpu_limit` | `8` | Max total GPUs across all nodes (cost guard) |
 | `target_az` | `""` (from cluster layer) | Passed automatically via deploy.sh |
+| `fsx_az` | `""` (storage output `fsx_az`) | AZ the GPU NodePools are pinned to (FSx's AZ); passed automatically via deploy.sh, `target_az` if empty |
+| `enable_sim_pool` | `false` | Also create the `gpu-sim` NodePool/EC2NodeClass for RT-core simulator GPUs (Isaac Sim; see `examples/isaaclab-gr00t-ppo`) |
+| `sim_instance_types` | `["g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]` | gpu-sim instance types; g7e recommended, g6e fallback; add `g5.*` where neither is offered |
+| `sim_capacity_type` | `["on-demand"]` | gpu-sim capacity types |
+| `sim_gpu_limit` | `16` | Max GPUs in the gpu-sim pool (added to the namespace GPU quota) |
 
 Key outputs: `nodepool_name`, `ec2nodeclass_name`.
 
@@ -188,7 +193,7 @@ State bucket and region are hardcoded in each layer's `versions.tf` backend bloc
 |-------|-----------|
 | storage | cluster (`cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `vpc_id`, `node_security_group_id`, `target_subnet_ids`, `region`) |
 | addons | cluster (`cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `node_security_group_id`, `region`, `mlflow_iam_role_arn`, `mlflow_s3_bucket`) |
-| workloads | cluster (`cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `node_security_group_id`, `target_az`, `region`) |
+| workloads | cluster (`cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `node_security_group_id`, `target_az`, `region`), storage (`fsx_az`) |
 | build | cluster (`region`) |
 
-If you change an output in the cluster layer, all downstream layers need a re-plan. Storage, workloads, and build are leaf layers with no downstream dependents.
+If you change an output in the cluster layer, all downstream layers need a re-plan. Workloads also reads `fsx_az` from storage, so after moving FSx, apply workloads too. Workloads and build are leaf layers with no downstream dependents.

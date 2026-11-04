@@ -76,3 +76,9 @@ variable "mlflow_iam_role_arn" {
   type        = string
   default     = ""
 }
+
+variable "dcgm_exporter_version" {
+  description = "dcgm-exporter image tag (nvcr.io/nvidia/k8s/dcgm-exporter). 4.x is needed for DCGM profiling metrics on Blackwell GPUs."
+  type        = string
+  default     = "4.6.1-4.8.4-distroless"
+}

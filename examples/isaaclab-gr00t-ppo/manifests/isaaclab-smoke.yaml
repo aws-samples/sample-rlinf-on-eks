@@ -1,0 +1,129 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Isaac Sim / IsaacLab smoke test on one RT-core GPU node (gpu-sim pool). No training.
+# Checks: driver + Vulkan ICD, headless Isaac Sim boot (cold, then warm with the shader
+# cache on FSx), RLinf stack-cube env create/reset/step at several env counts, camera
+# frames (saved as PNG) and GPU memory.
+#
+# Prereqs: isaaclab-gr00t profile image (Isaac Sim baked in at /opt/isaacsim; ISAAC_PATH=auto
+# falls back to an FSx copy from stage-isaacsim.yaml),
+# gpu-sim NodePool (workloads layer, enable_sim_pool = true).
+# Apply:
+#   kubectl -n $NAMESPACE create configmap isaaclab-smoke \
+#     --from-file=isaaclab_smoke.py=examples/isaaclab-gr00t-ppo/scripts/isaaclab_smoke.py \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-smoke.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: isaaclab-smoke
+  namespace: ${NAMESPACE}
+  labels:
+    app: rlinf
+    example: isaaclab-gr00t-ppo
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: rlinf
+        example: isaaclab-gr00t-ppo
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        role: gpu-sim
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: smoke
+          image: ${IMAGE}
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -uo pipefail
+              mkdir -p "${SMOKE_OUT}"
+              exec > >(tee -a "${SMOKE_OUT}/smoke-$(date -u +%Y%m%dT%H%M%S).log") 2>&1
+              echo "=== nvidia-smi ==="; nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
+              echo "=== Vulkan ICD ==="; ls -la /usr/share/vulkan/icd.d/ /etc/vulkan/icd.d/ 2>&1 | grep -i nvidia || echo "NO nvidia Vulkan ICD found"
+              cat /usr/share/vulkan/icd.d/nvidia_icd.json /etc/vulkan/icd.d/nvidia_icd.json 2>/dev/null | head -8
+              ls /usr/lib/x86_64-linux-gnu/libGLX_nvidia.so.0 /usr/lib/x86_64-linux-gnu/libnvidia-glvkspirv.so.* 2>&1 | head -3
+              export PYTHONPATH="${PYTHONPATH:-}"
+              if [ "${ISAAC_PATH}" = auto ]; then
+                if [ -f /opt/isaacsim/setup_conda_env.sh ]; then ISAAC_PATH=/opt/isaacsim; else ISAAC_PATH=/fsx/isaacsim/5.1.0; fi
+              fi
+              echo "=== venv / Isaac Sim env (ISAAC_PATH=${ISAAC_PATH}) ==="
+              ls -la /opt/venv/gr00t/bin/activate "${ISAAC_PATH}/setup_conda_env.sh" || true
+              set +u; source /opt/venv/gr00t/bin/activate; set -u
+              cd "${ISAAC_PATH}" || { echo "ISAAC_PATH missing"; exit 2; }
+              set +u; source ./setup_conda_env.sh; rc_env=$?; set -u
+              echo "setup_conda_env.sh rc=$rc_env"
+              # Same as run_training_eks.sh: use the venv's torch, not Isaac Sim's bundled one.
+              PYTHONPATH=$(echo "${PYTHONPATH:-}" | tr ':' '\n' | grep -v 'omni.isaac.ml_archive/pip_prebundle' | paste -sd: -); export PYTHONPATH
+              cd /workspace/RLinf
+              which python; python -c "import sys; print(sys.version)"
+              python -c "import torch; print('torch', torch.__version__, torch.__file__, torch.cuda.get_device_name(0))"
+              python -c "import torch; from flash_attn import flash_attn_func; q=torch.randn(1,128,8,64,device='cuda',dtype=torch.bfloat16); flash_attn_func(q,q,q); torch.cuda.synchronize(); print('flash_attn call OK on', torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0))" || { echo "flash_attn CALL FAILED (no kernels for this GPU? rebuild with FLASH_ATTN_ARCHS)"; exit 3; }
+              rc=0
+              for n in ${SMOKE_NUM_ENVS}; do
+                echo "=== smoke num_envs=$n (attempt 1 = cold if cache empty) ==="
+                timeout 2400 python -u /opt/smoke/isaaclab_smoke.py --num-envs "$n" --steps 100 --out "${SMOKE_OUT}" || rc=$?
+              done
+              echo "=== warm re-run num_envs=16 ==="
+              timeout 1800 python -u /opt/smoke/isaaclab_smoke.py --num-envs 16 --steps 100 --out "${SMOKE_OUT}/warm" || rc=$?
+              du -sh "${OMNI_CACHE_ROOT}" 2>/dev/null
+              echo "SMOKE_EXIT=$rc"; exit $rc
+          env:
+            # auto: Isaac Sim baked into the image (/opt/isaacsim) if present, else FSx (/fsx/isaacsim/5.1.0)
+            - name: ISAAC_PATH
+              value: "auto"
+            - name: SMOKE_NUM_ENVS
+              value: "16"
+            - name: SMOKE_OUT
+              value: "/fsx/isaacsim-smoke"
+            # Accept the NVIDIA Omniverse / Isaac Sim license non-interactively.
+            - name: OMNI_KIT_ACCEPT_EULA
+              value: "YES"
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: PRIVACY_CONSENT
+              value: "Y"
+            # Shader / kit caches on FSx so later runs skip shader compilation.
+            - name: OMNI_CACHE_ROOT
+              value: "/fsx/isaacsim-cache"
+            - name: XDG_CACHE_HOME
+              value: "/fsx/isaacsim-cache/xdg"
+            - name: OMNI_KIT_CACHE_DIR
+              value: "/fsx/isaacsim-cache/kit"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "16"
+              memory: "96Gi"
+            limits:
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+            - name: smoke
+              mountPath: /opt/smoke
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "32Gi"
+        - name: smoke
+          configMap:
+            name: isaaclab-smoke

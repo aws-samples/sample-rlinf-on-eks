@@ -39,7 +39,7 @@
 #
 # Usage:
 #   export NAMESPACE=dreamzero
-#   envsubst < examples/dreamzero/manifests/model-download.yaml | kubectl apply -f -
+#   envsubst '${NAMESPACE}' < examples/dreamzero/manifests/model-download.yaml | kubectl apply -f -
 #   kubectl logs -f job/model-download-dreamzero -n $NAMESPACE
 apiVersion: batch/v1
 kind: Job

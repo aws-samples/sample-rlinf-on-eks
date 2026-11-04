@@ -105,7 +105,8 @@ resource "aws_security_group" "fsx" {
 }
 
 # --- FSx for Lustre Filesystem ---
-# Placed in the same AZ as GPU and system nodes (target_subnet_ids).
+# Placed in fsx_az (default: the cluster target_az). The GPU NodePools follow fsx_az;
+# system nodes stay in target_az (they do not mount FSx).
 # PERSISTENT_2 deployment type is required for Data Repository Associations.
 #
 # WARNING: Changing subnet_ids forces filesystem replacement.
@@ -129,10 +130,36 @@ resource "aws_kms_alias" "fsx" {
   target_key_id = aws_kms_key.fsx.key_id
 }
 
+# The private subnet in fsx_az: looked up here (VPC + AZ + the cluster's private-subnet
+# tags) so moving FSx needs no cluster-layer apply.
+data "aws_subnets" "fsx_az" {
+  count = var.fsx_az != "" ? 1 : 0
+  filter {
+    name   = "vpc-id"
+    values = [var.vpc_id]
+  }
+  filter {
+    name   = "availability-zone"
+    values = [var.fsx_az]
+  }
+  tags = {
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
+  }
+}
+
+locals {
+  fsx_subnet_id = var.fsx_az != "" ? one(data.aws_subnets.fsx_az[0].ids) : jsondecode(var.target_subnet_ids)[0]
+}
+
+data "aws_subnet" "fsx" {
+  id = local.fsx_subnet_id
+}
+
 resource "aws_fsx_lustre_file_system" "training" {
   storage_capacity            = var.fsx_storage_capacity
   storage_type                = "SSD"
-  subnet_ids                  = [jsondecode(var.target_subnet_ids)[0]]
+  subnet_ids                  = [local.fsx_subnet_id]
   security_group_ids          = [aws_security_group.fsx.id]
   deployment_type             = "PERSISTENT_2"
   per_unit_storage_throughput = var.fsx_throughput_per_unit
@@ -239,4 +266,10 @@ resource "kubernetes_persistent_volume_claim" "fsx" {
   }
 
   depends_on = [kubernetes_persistent_volume.fsx]
+
+  # A PV can't be deleted while its PVC is bound (pv-protection finalizer), so
+  # replacing the filesystem (e.g. a new fsx_az) must replace the claim too.
+  lifecycle {
+    replace_triggered_by = [kubernetes_persistent_volume.fsx]
+  }
 }

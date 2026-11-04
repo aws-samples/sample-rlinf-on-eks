@@ -130,6 +130,7 @@ The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` tar
 | `maniskill-oft` | `openvla-oft` | ManiSkill PPO, Wan GRPO | — |
 | `libero-pi0` | `openpi` (`--env libero`, no ManiSkill) | LIBERO π₀ PPO | 32 min, 13.1 GB |
 | `dreamzero` | `dreamzero` (`--env libero`, no ManiSkill) | DreamZero SFT / convert / eval | 31 min, 12.6 GB |
+| `isaaclab-gr00t` | `gr00t` (`--env isaaclab`) + Isaac Sim 5.1 in the image (`ISAAC_SIM_VERSION`) | IsaacLab GR00T PPO | 78 min with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0`, 22.5 GB (13.7 GB without Isaac Sim) |
 
 Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~12.5–13 GB, and the main saving is build time.
 
@@ -165,6 +166,7 @@ IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
 | [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
 | [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
+| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S) | Validated |
 
 ---
 

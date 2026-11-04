@@ -1,0 +1,144 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# IsaacLab Franka stack-cube + GR00T N1.5 PPO, on one RT-core g-class node
+#
+# Isaac Sim 5.1 needs RT-core GPUs (not supported on A100/H100/H200), so this runs on the
+# `gpu-sim` pool. Validated default: 4 GPUs, env/rollout/actor all on 0-3 (upstream's
+# placement), actor.micro_batch_size=64, on g7e.24xlarge (4x RTX PRO 6000, recommended) or
+# g6e.24xlarge (4x L40S). 4 GPUs were as fast as 8; batch 128 gave no gain. See the README
+# Results. For 4x A10G (g5.12xlarge): actor.micro_batch_size=32 actor.enable_offload=True
+# without eval; actor.micro_batch_size=8 actor.enable_offload=True with eval
+# (runner.val_check_interval > 0).
+# Upstream recipe: examples/embodiment/config/isaaclab_franka_stack_cube_ppo_gr00t.yaml
+#
+# Image:  isaaclab-gr00t profile (examples/profiles.env)
+# Venv:   gr00t (torch 2.11; Isaac Sim's bundled torch is removed from PYTHONPATH)
+# Config: isaaclab_franka_stack_cube_ppo_gr00t
+#
+# Prerequisites:
+#   - Isaac Sim 5.1: baked into the isaaclab-gr00t image at /opt/isaacsim (ISAAC_PATH=auto).
+#     Optional fallback: stage-isaacsim.yaml stages it on FSx instead.
+#   - model-download.yaml (RLinf/RLinf-Gr00t-SFT-Stack-cube)
+#   - gpu-sim NodePool (workloads layer, enable_sim_pool = true)
+#
+# Usage:
+#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:isaaclab-gr00t-latest NAMESPACE=rlinf
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rlinf-isaaclab-gr00t
+  namespace: ${NAMESPACE}
+  labels:
+    app: rlinf
+    reference: rlinf
+    example: isaaclab-gr00t-ppo
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: rlinf
+        example: isaaclab-gr00t-ppo
+      annotations:
+        karpenter.sh/do-not-disrupt: "true"
+    spec:
+      restartPolicy: Never
+      serviceAccountName: training-sa
+      nodeSelector:
+        role: gpu-sim
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: node.kubernetes.io/instance-type
+                    operator: In
+                    values: ["g7e.24xlarge", "g6e.24xlarge"]
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: training
+          image: ${IMAGE}
+          command:
+            - bash
+            - -c
+            - |
+              cd /workspace/RLinf
+              # Log to FSx with a UTC timestamp per line: the pod log is lost when Karpenter
+              # removes the node, and scripts/gpu_profile.py uses the timestamps to align DCGM.
+              LOG_DIR="${CKPT_PATH}/logs/${JOB_NAME}"; mkdir -p "${LOG_DIR}"
+              set -o pipefail
+              bash /workspace/eks/scripts/run_training_eks.sh 2>&1 \
+                | TZ=UTC bash -c 'while IFS= read -r l; do printf "%(%Y-%m-%dT%H:%M:%SZ)T %s\n" -1 "$l"; done' \
+                | tee "${LOG_DIR}/train-$(date -u +%Y%m%dT%H%M%SZ).log"
+          env:
+            - name: JOB_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['job-name']
+            - name: CONFIG_NAME
+              value: "isaaclab_franka_stack_cube_ppo_gr00t"
+            - name: VENV_NAME
+              value: "gr00t"
+            - name: MODEL_PATH
+              value: "/fsx/models/RLinf-Gr00t-SFT-Stack-cube"
+            - name: HYDRA_OVERRIDES
+              value: "cluster.component_placement.env=0-3 cluster.component_placement.rollout.placement=0-3 cluster.component_placement.actor=0-3 actor.micro_batch_size=64"
+            - name: NUM_GPUS
+              value: "4"
+            - name: NUM_NODES
+              value: "1"
+            - name: CKPT_PATH
+              value: "/fsx/checkpoints"
+            # auto: Isaac Sim baked into the image (/opt/isaacsim) if present, else FSx (/fsx/isaacsim/5.1.0)
+            - name: ISAAC_PATH
+              value: "auto"
+            # Accept the NVIDIA Omniverse / Isaac Sim license non-interactively.
+            - name: OMNI_KIT_ACCEPT_EULA
+              value: "YES"
+            - name: ACCEPT_EULA
+              value: "Y"
+            - name: PRIVACY_CONSENT
+              value: "Y"
+            # Shader / kit caches on FSx (first boot compiles shaders, ~80 s extra).
+            - name: OMNI_CACHE_ROOT
+              value: "/fsx/isaacsim-cache"
+            - name: XDG_CACHE_HOME
+              value: "/fsx/isaacsim-cache/xdg"
+            - name: OMNI_KIT_CACHE_DIR
+              value: "/fsx/isaacsim-cache/kit"
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: "all"
+            # This pool does not attach EFA (g5.8xlarge+ supports one EFA v1 interface, without
+            # GPUDirect RDMA). Keep NCCL/libfabric on TCP.
+            - name: FI_PROVIDER
+              value: "tcp"
+            - name: NCCL_NET
+              value: "Socket"
+          resources:
+            requests:
+              nvidia.com/gpu: 4
+              cpu: "80"
+              memory: "600Gi"
+            limits:
+              nvidia.com/gpu: 4
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "96Gi"
