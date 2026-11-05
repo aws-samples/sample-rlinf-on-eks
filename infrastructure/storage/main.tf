@@ -24,11 +24,11 @@
 # and auto-imports from here when the filesystem is (re)created.
 
 resource "aws_s3_bucket" "fsx_data" {
-  bucket        = "${var.cluster_name}-fsx-data"
+  bucket        = local.s3_bucket_name
   force_destroy = true
 
   tags = {
-    Name    = "${var.cluster_name}-fsx-data"
+    Name    = local.s3_bucket_name
     Project = var.cluster_name
   }
 }
@@ -149,7 +149,8 @@ data "aws_subnets" "fsx_az" {
 }
 
 locals {
-  fsx_subnet_id = var.fsx_az != "" ? one(data.aws_subnets.fsx_az[0].ids) : jsondecode(var.target_subnet_ids)[0]
+  s3_bucket_name = var.s3_bucket_name != "" ? var.s3_bucket_name : "${var.cluster_name}-fsx-data"
+  fsx_subnet_id  = var.fsx_az != "" ? one(data.aws_subnets.fsx_az[0].ids) : jsondecode(var.target_subnet_ids)[0]
 }
 
 data "aws_subnet" "fsx" {

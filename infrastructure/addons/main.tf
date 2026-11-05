@@ -73,7 +73,7 @@ resource "aws_iam_policy" "karpenter" {
   #   provisioning/tagging/deletion actions are scoped to region-qualified
   #   per-resource-type ARNs with aws:RequestTag/aws:ResourceTag +
   #   ec2:CreateAction conditions, ported verbatim from the official AWS Karpenter
-  #   v1.11.1 controller policy. Validated on a live EKS cluster: Karpenter
+  #   v1.15.1 controller policy. Validated on a live EKS cluster: Karpenter
   #   provisions nodes and runs instance-profile GC cleanly under this policy.
   # checkov:skip=CKV_AWS_286: iam:PassRole is scoped to the Karpenter node role ARN
   #   with an iam:PassedToService=ec2.amazonaws.com condition, and instance-profile
@@ -89,6 +89,7 @@ resource "aws_iam_policy" "karpenter" {
           "ec2:DescribeCapacityReservations",
           "ec2:DescribeImages",
           "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
           "ec2:DescribeInstanceTypeOfferings",
           "ec2:DescribeInstanceTypes",
           "ec2:DescribeLaunchTemplates",
@@ -102,7 +103,7 @@ resource "aws_iam_policy" "karpenter" {
         ]
         Resource = "*"
       },
-      # --- Official Karpenter v1.11.1 scoped EC2 provisioning statements ---
+      # --- Official Karpenter v1.15.1 scoped EC2 provisioning statements ---
       {
         Sid    = "AllowScopedEC2InstanceAccessActions"
         Effect = "Allow"
@@ -238,7 +239,7 @@ resource "aws_iam_policy" "karpenter" {
         # support), so it uses Resource="*". Required by Karpenter's
         # instanceprofile.garbagecollection controller; without it the controller
         # logs AccessDenied and cannot reap orphaned instance profiles. Matches
-        # the official AWS Karpenter v1.11.1 policy's "AllowInstanceProfileList".
+        # the official AWS Karpenter v1.15.1 policy's "AllowInstanceProfileList".
         Sid      = "KarpenterInstanceProfileList"
         Effect   = "Allow"
         Action   = "iam:ListInstanceProfiles"
@@ -276,7 +277,7 @@ resource "helm_release" "karpenter" {
   namespace  = "kube-system"
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "1.11.1"
+  version    = "1.15.1"
   wait       = true
   atomic     = true
 
@@ -338,7 +339,7 @@ resource "helm_release" "gpu_operator" {
   chart            = "gpu-operator"
   namespace        = kubernetes_namespace.gpu_operator.metadata[0].name
   create_namespace = false
-  version          = "v24.9.2"
+  version          = "v26.7.2"
 
   # Disable driver install -- EKS GPU AMI already has NVIDIA drivers
   set {
@@ -361,7 +362,7 @@ resource "helm_release" "gpu_operator" {
   # dcgm-exporter 4.x (DCGM 4.6.1). The chart's default 3.3.9-3.6.1 (DCGM 3.3.9)
   # cannot load the profiling module on Blackwell (RTX PRO 6000, g7e), so
   # DCGM_FI_PROF_* (SM_ACTIVE, tensor) were missing there (NVIDIA/dcgm-exporter#707).
-  # Image-only bump on GPU Operator v24.9.2.
+  # Matches the GPU Operator v26.7.2 default.
   set {
     name  = "dcgmExporter.version"
     value = var.dcgm_exporter_version
@@ -393,6 +394,12 @@ resource "helm_release" "gpu_operator" {
   set {
     name  = "gfd.enabled"
     value = "true"
+  }
+
+  # Confidential Computing manager: on by default since v26.x; not used here.
+  set {
+    name  = "ccManager.enabled"
+    value = "false"
   }
 
   # Tolerate GPU node taints so operator components schedule on GPU nodes

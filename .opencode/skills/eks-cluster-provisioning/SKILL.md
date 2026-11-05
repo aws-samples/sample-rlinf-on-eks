@@ -28,7 +28,7 @@ We use **Terraform** as the primary IaC tool. Terraform provides state managemen
 
 ### Cluster Version
 
-Use the latest supported EKS version (currently 1.35). GPU drivers and EFA support improve with newer versions.
+Use the latest supported EKS version (currently 1.37). GPU drivers and EFA support improve with newer versions.
 
 ### Region and Availability Zone Selection
 
@@ -149,7 +149,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "EKS Kubernetes version"
   type        = string
-  default     = "1.35"
+  default     = "1.37"
 }
 
 variable "gpu_instance_type" {
@@ -437,7 +437,7 @@ resource "helm_release" "gpu_operator" {
   chart            = "gpu-operator"
   namespace        = "gpu-operator"
   create_namespace = true
-  version          = "v24.9.2"
+  version          = "v26.7.2"
 
   # Disable driver install -- EKS GPU AMI already has NVIDIA drivers
   set {
@@ -707,7 +707,7 @@ For rapid prototyping without Terraform, use eksctl:
 eksctl create cluster \
   --name <cluster-name>-dev \
   --region us-east-1 \
-  --version 1.35 \
+  --version 1.37 \
   --with-oidc \
   --managed \
   --node-type p4de.24xlarge \

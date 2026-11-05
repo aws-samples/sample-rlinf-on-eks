@@ -54,7 +54,7 @@ Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Polic
 - [Terraform state bucket](#terraform-state-backend) created
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5.0
 - [AWS CLI (Command Line Interface) v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) >= 1.35
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) >= 1.36
 
 > See [Prerequisites and Setup](#prerequisites-and-setup) for full software versions and setup instructions.
 
@@ -207,7 +207,7 @@ rlinf-on-eks/
 |------|---------|---------|--------------|
 | Terraform | >= 1.5.0 | https://developer.hashicorp.com/terraform/install | All steps |
 | AWS CLI | v2 | https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html | All steps |
-| kubectl | >= 1.35 | https://kubernetes.io/docs/tasks/tools/ | Steps 4-6 |
+| kubectl | >= 1.36 | https://kubernetes.io/docs/tasks/tools/ | Steps 4-6 |
 | Docker | Latest | https://docs.docker.com/get-docker/ | Local builds (alternative to CodeBuild) |
 | Helm | >= 3.x | https://helm.sh/docs/intro/install/ | Troubleshooting only (Terraform manages Helm releases) |
 

@@ -136,6 +136,8 @@ build_vars() {
         [[ -n "$fsx_az" ]] && vars+=("-var=fsx_az=$fsx_az")
       fi
       [[ -n "$region" ]] && vars+=("-var=region=$region")
+      local s3_bucket; s3_bucket=$(get_output cluster mlflow_s3_bucket)
+      [[ -n "$s3_bucket" ]] && vars+=("-var=s3_bucket_name=$s3_bucket")
       ;;
     addons)
       local cluster_name cluster_endpoint cluster_ca node_sg region mlflow_iam_role_arn mlflow_s3_bucket

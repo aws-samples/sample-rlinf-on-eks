@@ -44,6 +44,12 @@ variable "fsx_az" {
   default     = ""
 }
 
+variable "s3_bucket_name" {
+  description = "S3 data bucket name (FSx data repository). Defaults to <cluster_name>-fsx-data when empty. Set it to keep an existing bucket when the cluster is re-created under a new name (import the bucket into this layer's state first). Must match the cluster layer's training_s3_bucket_name."
+  type        = string
+  default     = ""
+}
+
 variable "fsx_storage_capacity" {
   description = "FSx for Lustre storage capacity in GiB (minimum 1200)"
   type        = number

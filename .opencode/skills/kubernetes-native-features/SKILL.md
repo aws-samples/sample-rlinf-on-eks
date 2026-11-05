@@ -35,7 +35,7 @@ Configuration in Terraform:
 resource "helm_release" "gpu_operator" {
   name    = "gpu-operator"
   chart   = "gpu-operator"
-  version = "v24.9.2"
+  version = "v26.7.2"
 
   set { name = "driver.enabled";       value = "false" }  # AMI has drivers
   set { name = "toolkit.enabled";      value = "true" }
