@@ -54,8 +54,6 @@ RUN if [ -n "${ASSETS}" ]; then \
         link_assets; \
     fi
 
-# Mirror upstream final-image cleanup, and record which venvs this profile ships
-# (read by the stage-2 DreamZero guard and the L2 container test).
 # Consistency pass: some installs (e.g. gr00t --env isaaclab) pull pandas early, while
 # numpy is still 2.x, then pin numpy back to 1.26. pandas >= 3.1 needs numpy >= 2.0.2,
 # so re-pin pandas to the last series that supports numpy 1.26 in any venv with numpy < 2.
@@ -110,6 +108,8 @@ RUN if [ -n "${ISAAC_SIM_VERSION}" ]; then \
       test -f /opt/isaacsim/setup_conda_env.sh && \
       echo "Isaac Sim $(cat /opt/isaacsim/VERSION 2>/dev/null) -> /opt/isaacsim ($(du -sh /opt/isaacsim | cut -f1))"; \
     fi
+# Mirror upstream final-image cleanup, and record which venvs this profile ships
+# (read by the stage-2 DreamZero guard and the L2 container test).
 RUN uv cache prune && rm -rf /var/lib/apt/lists/* && \
     for t in ${INSTALLS}; do echo "${t%%:*}"; done > "${UV_PATH}/.profile" && \
     echo "Profile venvs:" && cat "${UV_PATH}/.profile"

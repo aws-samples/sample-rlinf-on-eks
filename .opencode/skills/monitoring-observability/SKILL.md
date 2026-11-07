@@ -45,7 +45,7 @@ Monitor GPU utilization, training progress, infrastructure health, and costs for
 
 DCGM Exporter is managed by the NVIDIA GPU Operator (see Skill 01 `helm.tf`). The GPU Operator Helm release sets `dcgmExporter.enabled = true`, which deploys DCGM exporter pods on all GPU nodes automatically.
 
-> **Discovery #59**: The NVIDIA GPU Operator creates the DCGM exporter DaemonSet and Service (`nvidia-dcgm-exporter` on port 9400) but does **NOT** create a ServiceMonitor. Without a ServiceMonitor, Prometheus never discovers or scrapes GPU metrics. Our `infrastructure/addons/main.tf` creates the ServiceMonitor via `null_resource.dcgm_service_monitor` (using `kubectl apply` because `kubernetes_manifest` requires CRD discovery at plan time, which fails on fresh clusters). The ServiceMonitor targets the `gpu-operator` namespace with label selector `app: nvidia-dcgm-exporter` and scrapes the `gpu-metrics` port at 15s intervals.
+> **Discovery #59**: The NVIDIA GPU Operator creates the DCGM exporter DaemonSet and Service (`nvidia-dcgm-exporter` on port 9400) but creates a ServiceMonitor only when `dcgmExporter.serviceMonitor.enabled=true`. Without a ServiceMonitor, Prometheus never discovers or scrapes GPU metrics. Our `infrastructure/addons/main.tf` has the operator create it (`dcgmExporter.serviceMonitor.enabled=true` when `enable_monitoring = true`); a separately applied ServiceMonitor of the same name is deleted when the operator reconciles the exporter.
 
 For manual standalone installation (not needed when using GPU Operator):
 

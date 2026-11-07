@@ -382,9 +382,8 @@ resource "helm_release" "gpu_operator" {
     value = "/etc/dcgm-exporter/dcgm-metrics.csv"
   }
 
-  # The operator owns the DCGM ServiceMonitor. A separately applied one
-  # (null_resource.dcgm_service_monitor, previously) was removed when the operator
-  # reconciled the exporter, leaving Prometheus without GPU metrics.
+  # The operator owns the DCGM ServiceMonitor: a separately applied one is deleted when
+  # the operator reconciles the exporter, leaving Prometheus without GPU metrics.
   set {
     name  = "dcgmExporter.serviceMonitor.enabled"
     value = var.enable_monitoring ? "true" : "false"
@@ -394,6 +393,13 @@ resource "helm_release" "gpu_operator" {
   set {
     name  = "gfd.enabled"
     value = "true"
+  }
+
+  # GDRCopy off: the AMI manages the driver (driver.enabled=false), and the gdrcopy
+  # validator otherwise blocks GPUs on g4dn/g5 (the AMI ships gdrdrv only for the open driver).
+  set {
+    name  = "gdrcopy.enabled"
+    value = "false"
   }
 
   # Confidential Computing manager: on by default since v26.x; not used here.

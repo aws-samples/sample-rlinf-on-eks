@@ -1,5 +1,0 @@
-# Validate 2 PPO steps on whichever 4-GPU RT-core node is caught (all AZs): g5 runs with the
-# A10G settings, g6e/g7e with the default batch 64. Use with SIM_TYPES listing all three families.
-# name|gpus|max_steps|val_check_interval|families|extra
-val-g5-4gpu-b32|4|2|-1|g5|actor.micro_batch_size=32 actor.enable_offload=True
-val-4gpu-b64|4|2|-1|g7e,g6e|actor.micro_batch_size=64

@@ -54,7 +54,7 @@ variable "fsx_az" {
 }
 
 variable "gpu_any_az" {
-  description = "Let the GPU NodePools launch in any VPC AZ instead of fsx_az. Use only to find capacity before moving FSx to that AZ (infrastructure/capacity/fsx-move.sh); GPU nodes outside fsx_az read FSx cross-AZ."
+  description = "Let the GPU NodePools launch in any VPC AZ instead of fsx_az. Use only to find capacity before moving FSx to that AZ (TF_VAR_fsx_az); GPU nodes outside fsx_az read FSx cross-AZ."
   type        = bool
   default     = false
 }

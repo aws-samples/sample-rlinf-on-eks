@@ -130,7 +130,7 @@ build_vars() {
       [[ -n "$vpc_id" ]] && vars+=("-var=vpc_id=$vpc_id")
       [[ -n "$node_sg" ]] && vars+=("-var=node_security_group_id=$node_sg")
       [[ -n "$subnet_ids" ]] && vars+=("-var=target_subnet_ids=$subnet_ids")
-      # FSx AZ: TF_VAR_fsx_az if set (fsx-move.sh), else the AZ FSx is in now, else target_az.
+      # FSx AZ: TF_VAR_fsx_az if set (moving FSx), else the AZ FSx is in now, else target_az.
       if [[ -z "${TF_VAR_fsx_az:-}" ]]; then
         local fsx_az; fsx_az=$(get_output storage fsx_az)
         [[ -n "$fsx_az" ]] && vars+=("-var=fsx_az=$fsx_az")

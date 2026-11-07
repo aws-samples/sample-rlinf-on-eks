@@ -29,7 +29,7 @@ There are two separate "RLinf + Isaac Lab" integrations, maintained by different
 The EKS pieces here are the same for both, because both need RT-core GPUs:
 - the `gpu-sim` pool
 - Isaac Sim in the image (or staged on FSx as a fallback) and the shader cache on FSx
-- the GPU Operator gdrcopy note in [Troubleshooting](#troubleshooting)
+- the GPU Operator gdrcopy note in [Troubleshooting](#troubleshooting) (only for clusters not built from this repo; the addons layer already sets it)
 
 ## Architecture
 
@@ -52,8 +52,8 @@ Only GR00T's action head (DiT, ~550M parameters) trains; the ~3B Eagle backbone 
 - The cluster and storage layers from the main [README](../../README.md).
 - A `gpu-sim` NodePool for RT-core GPUs: `enable_sim_pool = true` in the workloads layer. Default instance types: g7e.24/48xlarge, g6e.24/48xlarge.
 - **dcgm-exporter 4.x** if you want GPU profiling metrics (SM_ACTIVE) on Blackwell GPUs (the addons layer sets `dcgm_exporter_version`).
-- **NVIDIA GPU Operator users:** if `ClusterPolicy.spec.gdrcopy.enabled` is `true` while the AMI manages the driver (`driver.enabled: false`), g4dn/g5 nodes never get allocatable GPUs. See [Troubleshooting](#troubleshooting).
-- **NVIDIA license:** building the image with `ACCEPT_ISAAC_SIM_EULA=Y` (or staging Isaac Sim on FSx), and setting `OMNI_KIT_ACCEPT_EULA=YES` in the pods, means you accept the [NVIDIA Isaac Sim / Omniverse license](https://docs.isaacsim.omniverse.nvidia.com/latest/common/NVIDIA_Omniverse_License_Agreement.html).
+- **NVIDIA GPU Operator:** the addons layer sets `gdrcopy.enabled=false`. On a cluster not built from this repo, if `ClusterPolicy.spec.gdrcopy.enabled` is `true` while the AMI manages the driver (`driver.enabled: false`), g4dn/g5 nodes never get allocatable GPUs. See [Troubleshooting](#troubleshooting).
+- **NVIDIA license:** building the image with `ACCEPT_ISAAC_SIM_EULA=Y` (or staging Isaac Sim on FSx), and setting `OMNI_KIT_ACCEPT_EULA=YES` in the pods, means you accept the [NVIDIA Isaac Sim / Omniverse license](https://docs.isaacsim.omniverse.nvidia.com/latest/common/NVIDIA_Omniverse_License_Agreement.html). The manifests also set `PRIVACY_CONSENT=Y`, which opts in to Omniverse telemetry/data collection; remove it to opt out.
 
 ## Run it
 
@@ -138,13 +138,13 @@ What the measurements show:
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| g5/g4dn node is Ready but `nvidia.com/gpu` is never allocatable; `nvidia-operator-validator` stuck in `gdrcopy-validation` (`lsmod \| grep gdrdrv` retrying) | The EKS AL2023 GPU AMI forces the **proprietary** driver on g4dn/g5 (GSP off) and only ships `gdrdrv.ko` for the open flavor. With `driver.enabled: false`, GPU Operator `gdrcopy.enabled: true` installs nothing; it only adds this validator gate | Set `ClusterPolicy.spec.gdrcopy.enabled: false`. On p5en the AMI still loads gdrdrv itself, and EFA GPUDirect RDMA does not depend on it |
+| g5/g4dn node is Ready but `nvidia.com/gpu` is never allocatable; `nvidia-operator-validator` stuck in `gdrcopy-validation` (`lsmod \| grep gdrdrv` retrying) | The EKS AL2023 GPU AMI forces the **proprietary** driver on g4dn/g5 (GSP off) and only ships `gdrdrv.ko` for the open flavor. With `driver.enabled: false`, GPU Operator `gdrcopy.enabled: true` installs nothing; it only adds this validator gate | The addons layer sets `gdrcopy.enabled=false`. On a cluster not built from this repo, set `ClusterPolicy.spec.gdrcopy.enabled: false`. On p5en the AMI still loads gdrdrv itself, and EFA GPUDirect RDMA does not depend on it |
 | Log noise: `carb.launcher ... failed to fork the child process ... Resource temporarily unavailable`, GLFW / X display warnings | Isaac Sim helper processes (`nvidia-smi -q`, telemetry) in a container, and headless mode | Harmless |
 | First boot is slow (~2.5 min) | Shader compilation | Expected once; the cache on FSx brings later boots to ~65 s |
-| `CUDA error: no kernel image is available for execution on the device` in `flash_attn_gpu.fwd` on RTX PRO 6000 (g7e) | The prebuilt flash-attn 2.8.3 wheel has only sm_80 and sm_90 kernels. L40S (sm_89) runs the sm_80 code; Blackwell (sm_120) cannot | Build the image with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0` (adds ~60 min; keep `FLASH_ATTN_MAX_JOBS` ≤ 6 on a 145 GB build host, 16 runs out of memory). Fallback without a rebuild: `GR00T_ATTN=sdpa` with `scripts/gr00t_attn_patch.sh` (same speed for this model) |
+| `CUDA error: no kernel image is available for execution on the device` in `flash_attn_gpu.fwd` on RTX PRO 6000 (g7e) | The prebuilt flash-attn 2.8.3 wheel has only sm_80 and sm_90 kernels. L40S (sm_89) runs the sm_80 code; Blackwell (sm_120) cannot | Build the image with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0` (adds ~60 min; keep `FLASH_ATTN_MAX_JOBS` ≤ 6 on a 145 GB build host, 16 runs out of memory). The buildspec sets this by default for `PROFILE=isaaclab-gr00t` |
 | `flash_attn` imports but training fails on a new GPU type | An import does not touch the GPU | Run one attention call in the smoke test before training |
 | No `DCGM_FI_PROF_*` (SM_ACTIVE) metrics on RTX PRO 6000; exporter logs `Not collecting DCP metrics: ... module of DCGM that is not currently loaded` | dcgm-exporter 3.3.x (GPU Operator v24.9 default) cannot load DCGM's profiling module on Blackwell | dcgm-exporter 4.x (`4.6.1-4.8.4-distroless`, addons `dcgm_exporter_version`). Note: 4.x labels the node `hostname`, 3.x `Hostname` |
 | First Isaac Sim boot from FSx takes ~20 min (FSx-staged Isaac Sim only) | A new FSx with an S3 data repository loads file contents lazily on first read | Bake Isaac Sim into the image (default). If you stage it on FSx, prefetch after creating FSx (`find /fsx/isaacsim/5.1.0 -type f \| xargs -P 48 cat > /dev/null`, ~10 min for 18 GB) |
 | Batch 32 + eval runs out of GPU memory on 4× A10G | Eval envs are created at start-up when `runner.val_check_interval > 0`, on top of Isaac Sim, rollout and actor | `actor.micro_batch_size=8 actor.enable_offload=True` on A10G, or a larger GPU |
-| Training pod Pending for hours; `InsufficientInstanceCapacity` in the Karpenter log | On-demand g6e/g7e capacity is often unavailable in an AZ | List several instance types and AZs (`sim_instance_types`, `gpu_any_az`), keep a caught node between runs; see [`infrastructure/capacity/`](../../infrastructure/capacity/) |
+| Training pod Pending for hours; `InsufficientInstanceCapacity` in the Karpenter log | On-demand g6e/g7e capacity is often unavailable in an AZ | List several instance types and AZs (`sim_instance_types`, `gpu_any_az`), or use a reservation; see [Scarce GPU capacity](../../infrastructure/AGENTS.md#scarce-gpu-capacity) |
 | Slow pod start on a new node (image pull + unpack) | A large image unpacked on the gp3 root volume (250 MB/s) | `instanceStorePolicy: RAID0` in the EC2NodeClass puts containerd/kubelet on the NVMe instance store (set in this repo's workloads layer) |

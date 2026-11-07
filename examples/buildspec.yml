@@ -18,7 +18,8 @@
 #   - UPSTREAM_REF: Git ref to checkout (tag, branch, or commit SHA)
 #   - BUILD_TARGET: Upstream Dockerfile target (default: embodied-maniskill_libero)
 #   - FLASH_ATTN_ARCHS (profiles only): rebuild flash-attn for these archs, e.g. "8.0;9.0;10.0;12.0"
-#     (needed on Blackwell RTX, sm_120: the prebuilt wheel ships sm_80 + sm_90 only). FLASH_ATTN_MAX_JOBS (default 6).
+#     (needed on Blackwell RTX, sm_120: the prebuilt wheel ships sm_80 + sm_90 only). Defaults to
+#     "8.0;9.0;10.0;12.0" for PROFILE=isaaclab-gr00t (g7e), empty otherwise. FLASH_ATTN_MAX_JOBS (default 6).
 #   - ISAAC_SIM_VERSION + ACCEPT_ISAAC_SIM_EULA=Y (profiles only): bake Isaac Sim standalone into
 #     /opt/isaacsim (~19 GB). Setting ACCEPT_ISAAC_SIM_EULA=Y accepts the NVIDIA Isaac Sim license.
 #   - PROFILE: Image profile (default: full). `full` = BUILD_TARGET as-is (13 venvs),
@@ -53,6 +54,9 @@ phases:
       - "ECR_URI=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${ECR_REPO}"
       # Resolve PROFILE (examples/profiles.env) -> INSTALLS/ASSETS/ASSET_VENV + tag prefix; fails on bad input.
       - "source examples/scripts/resolve_profile.sh && resolve_profile || exit 1"
+      # isaaclab-gr00t runs on g7e (Blackwell, sm_120): never build it without sm_120 flash-attn kernels.
+      - "if [ \"$PROFILE\" = isaaclab-gr00t ] && [ -z \"${FLASH_ATTN_ARCHS:-}\" ]; then FLASH_ATTN_ARCHS='8.0;9.0;10.0;12.0'; fi"
+      - "echo FLASH_ATTN_ARCHS=${FLASH_ATTN_ARCHS:-<prebuilt wheel>}"
       - "IMAGE_TAG=${PROFILE_TAG_PREFIX}-${CODEBUILD_RESOLVED_SOURCE_VERSION:-$(date +%Y%m%d-%H%M%S)}"
       - "if [ \"$PROFILE\" = full ]; then MOVING_TAG=latest; else MOVING_TAG=${PROFILE}-latest; fi"
       - "echo ECR_URI=$ECR_URI"
