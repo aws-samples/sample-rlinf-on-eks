@@ -112,6 +112,15 @@ variable "sim_capacity_type" {
   default     = ["on-demand"]
 }
 
+variable "sim_capacity_reservation_selector" {
+  description = "Capacity reservation selector for the gpu-sim EC2NodeClass (ODCRs for g-class sims). Set together with sim_capacity_type = [\"reserved\", \"on-demand\"]. Same shape as capacity_reservation_selector."
+  type = list(object({
+    id   = optional(string)
+    tags = optional(map(string))
+  }))
+  default = []
+}
+
 variable "sim_gpu_limit" {
   description = "Maximum total GPUs Karpenter can provision in the gpu-sim pool (cost guard)"
   type        = number

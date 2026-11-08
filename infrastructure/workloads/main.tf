@@ -329,7 +329,7 @@ resource "kubernetes_manifest" "sim_ec2nodeclass" {
     metadata = {
       name = "gpu-sim"
     }
-    spec = {
+    spec = merge({
       amiSelectorTerms = [
         {
           alias = "al2023@latest"
@@ -369,6 +369,10 @@ resource "kubernetes_manifest" "sim_ec2nodeclass" {
         }
       ]
       userData = base64encode(file("${path.module}/../cluster/scripts/gpu-node-bootstrap.sh"))
-    }
+      },
+      length(var.sim_capacity_reservation_selector) > 0 ? {
+        capacityReservationSelectorTerms = var.sim_capacity_reservation_selector
+      } : {}
+    )
   }
 }
