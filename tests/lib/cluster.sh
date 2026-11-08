@@ -78,19 +78,19 @@ run_level_0() {
   log_header "L0: Infrastructure Smoke Test"
 
   # Clean up any previous run
-  cleanup_job smoke-test
+  cleanup_job smoke-test rlinf
 
   # Apply smoke test
   kubectl apply -f "${_MANIFESTS_DIR}/smoke-test.yaml"
 
   # Wait for completion
-  if ! wait_for_job smoke-test default 600; then
+  if ! wait_for_job smoke-test rlinf 600; then
     return 1
   fi
 
   # Parse results
   local logs
-  logs=$(get_job_logs smoke-test)
+  logs=$(get_job_logs smoke-test rlinf)
 
   local pass_count fail_count
   pass_count=$(echo "$logs" | sed -n 's/.*Results: \([0-9]*\) passed.*/\1/p' | tail -1)
@@ -101,7 +101,7 @@ run_level_0() {
   log_info "Smoke test: ${pass_count} passed, ${fail_count} failed"
 
   # Cleanup
-  cleanup_job smoke-test
+  cleanup_job smoke-test rlinf
 
   if (( fail_count > 0 )); then
     return 1

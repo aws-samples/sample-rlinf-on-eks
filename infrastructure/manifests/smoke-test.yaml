@@ -6,11 +6,12 @@
 # Validates GPU, EFA, and FSx on a single node.
 # Run after infrastructure provisioning:
 #   kubectl apply -f manifests/smoke-test.yaml
-#   kubectl logs -f job/smoke-test
+#   kubectl logs -f job/smoke-test -n rlinf
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: smoke-test
+  namespace: rlinf   # fsx-claim (mounted below) lives in rlinf
   labels:
     app: smoke-test
 spec:

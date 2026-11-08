@@ -74,8 +74,12 @@ err() { echo "ERROR: $*" >&2; exit 1; }
 # Get outputs from a layer's state
 # -------------------------------------------------------------------
 get_output() {
-  local layer="$1" key="$2"
-  terraform -chdir="${SCRIPT_DIR}/${layer}" output -raw "$key" 2>/dev/null || echo ""
+  local layer="$1" key="$2" out
+  # On an empty state, `output -raw` prints a "No outputs found" warning to stdout and
+  # exits 0 (first storage apply of a fresh deploy); treat that as "no value".
+  out=$(terraform -chdir="${SCRIPT_DIR}/${layer}" output -no-color -raw "$key" 2>/dev/null) || out=""
+  case "$out" in *"No outputs found"*|*Warning:*) out="";; esac
+  echo "$out"
 }
 
 # -------------------------------------------------------------------
@@ -178,9 +182,12 @@ build_vars() {
       fi
       ;;
     build)
-      local region
+      local region cluster_name
       region=$(get_output cluster region)
+      cluster_name=$(get_output cluster cluster_name)
       [[ -n "$region" ]] && vars+=("-var=region=$region")
+      # Bucket/role/KMS names derive from cluster_name; ecr_repository_name stays as set.
+      [[ -n "$cluster_name" ]] && vars+=("-var=cluster_name=$cluster_name")
       ;;
   esac
 

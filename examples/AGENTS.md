@@ -14,7 +14,7 @@ All RLinf training workloads deploy into the `rlinf` namespace. This is created 
 - Manifests in `manifests/` and `examples/` hardcode `namespace: rlinf`
 - The `training-sa` ServiceAccount and `fsx-claim` PVC live in `rlinf`
 - MLflow deploys into the `rlinf` namespace (accessed via `mlflow.rlinf.svc.cluster.local`)
-- Infrastructure tests (L0 smoke, L3 NCCL) remain in `default`
+- Infrastructure tests: L0 smoke runs in `rlinf` (it mounts `fsx-claim`); the L3 NCCL smoke MPIJob stays in `default`
 
 Deploy with: `envsubst < examples/<example>/manifests/<example>.yaml | kubectl apply -f -`
 (No `-n rlinf` needed -- namespace is in the manifest.)
