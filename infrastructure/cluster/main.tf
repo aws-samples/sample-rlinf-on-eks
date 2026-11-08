@@ -32,9 +32,14 @@ locals {
   # reordering would replace them. Chasing capacity only needs a new target_az
   # (and an FSx re-create), not a VPC/EKS rebuild.
   # Workload resources (system nodes, FSx, GPU NodePools) stay pinned to target_az.
-  vpc_azs = slice(
+  # Regions with 4+ AZs: if target_az is past the first 3 (e.g. us-west-2d, where a
+  # Capacity Block may land), it replaces the last of the 3, so it always has a subnet.
+  vpc_azs_first = slice(
     data.aws_availability_zones.available.names,
     0, min(3, length(data.aws_availability_zones.available.names))
+  )
+  vpc_azs = contains(local.vpc_azs_first, local.effective_az) ? local.vpc_azs_first : concat(
+    slice(local.vpc_azs_first, 0, length(local.vpc_azs_first) - 1), [local.effective_az]
   )
 
   # Single subnet for all workload resources in the target AZ
