@@ -17,6 +17,12 @@
 
 data "aws_availability_zones" "available" {
   state = "available"
+  # Regular AZs only: opted-in Local/Wavelength Zones (e.g. us-west-2-lax-1a) sort
+  # before them and would otherwise become VPC/EKS subnets.
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 data "aws_caller_identity" "current" {}
