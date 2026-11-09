@@ -148,8 +148,6 @@ spec:
             # --- Experiment Tracking (MLflow) ---
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.rlinf.svc.cluster.local"
-            - name: EXPERIMENT_NAME
-              value: "${EXPERIMENT_NAME}"
             # --- NCCL + EFA ---
             - name: NCCL_DEBUG
               value: "WARN"
