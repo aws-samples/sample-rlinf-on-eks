@@ -87,7 +87,8 @@ spec:
               fi
 
               # Verify model
-              if [ ! -f "${MODEL_PATH}/config.json" ]; then
+              # HF checkpoints ship config.json; openpi (pi0) ships model.safetensors only.
+              if [ ! -f "${MODEL_PATH}/config.json" ] && [ ! -f "${MODEL_PATH}/model.safetensors" ]; then
                 echo "ERROR: Model not found at ${MODEL_PATH}"
                 exit 1
               fi
