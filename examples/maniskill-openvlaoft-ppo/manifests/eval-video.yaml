@@ -100,6 +100,9 @@ spec:
               # Link simulator assets
               if [ -x "/usr/local/bin/link_assets" ]; then link_assets; fi
 
+              # Start from an empty video dir: videos from an earlier run would otherwise be
+              # picked up by generate-showcase-video.sh (FSx auto-export also deletes them in S3).
+              rm -rf /fsx/checkpoints/openvlaoft-eval-video/video
               cd /workspace/RLinf
 
               # Run eval with video recording.

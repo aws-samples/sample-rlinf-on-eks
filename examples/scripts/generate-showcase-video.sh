@@ -206,12 +206,19 @@ log_info "Finding video output..."
 
 VIDEO_S3_PREFIX="s3://$S3_BUCKET/checkpoints/$VIDEO_OUTPUT_PATH/video/eval/"
 
-# List all mp4 files and pick the largest (most complete episode)
-best_video=$(aws s3 ls "$VIDEO_S3_PREFIX" --recursive 2>/dev/null \
-  | grep '\.mp4$' \
-  | sort -k3 -n -r \
-  | head -1 \
-  | sed 's/^[0-9 -]*[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\} *[0-9]* //')
+# List all mp4 files and pick the largest (most complete episode). FSx exports new
+# files to S3 asynchronously (data-repository auto-export), so the video can appear in
+# S3 a minute or more after the Job completes: retry for up to VIDEO_EXPORT_WAIT seconds.
+best_video=""
+for _ in $(seq 1 $(( ${VIDEO_EXPORT_WAIT:-600} / 15 ))); do
+  best_video=$(aws s3 ls "$VIDEO_S3_PREFIX" --recursive 2>/dev/null \
+    | { grep '\.mp4$' || true; } \
+    | sort -k3 -n -r \
+    | head -1 \
+    | sed 's/^[0-9 -]*[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\} *[0-9]* //')
+  [[ -n "$best_video" ]] && break
+  sleep 15
+done
 
 if [[ -z "$best_video" ]]; then
   log_fail "No .mp4 files found at $VIDEO_S3_PREFIX"
