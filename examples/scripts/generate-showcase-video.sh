@@ -106,13 +106,17 @@ fi
 if [[ -z "${CKPT_PATH:-}" ]]; then
   log_fail "CKPT_PATH environment variable not set"
   echo "  Set it to the full_weights.pt path on FSx, e.g.:"
-  echo "  export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt"
+  echo "  export CKPT_PATH=/fsx/checkpoints/<EXPERIMENT_NAME>/<experiment_name>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt"
   exit 1
 fi
 
 # --- Extract metadata from manifest annotations ---
 # We parse the YAML directly (after envsubst) to avoid needing the Job deployed first.
-rendered=$(envsubst < "$MANIFEST")
+# Restricted envsubst: only the manifest's own variables. The container script also uses
+# ${PYTHONPATH:-} / ${LD_LIBRARY_PATH:-}, which must stay literal (unrestricted envsubst
+# would bake in this machine's values).
+# shellcheck disable=SC2016
+rendered=$(envsubst '${IMAGE} ${NAMESPACE} ${S3_BUCKET} ${CKPT_PATH} ${LORA_PATH}' < "$MANIFEST")
 get_annotation() {
   local key="$1"
   echo "$rendered" | grep "rlinf.io/$key" | head -1 | sed 's/.*: *"\(.*\)"/\1/'

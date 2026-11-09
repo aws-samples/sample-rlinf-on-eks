@@ -24,7 +24,7 @@
 # Usage:
 #   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
-#   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
+#   export CKPT_PATH=/fsx/checkpoints/rlinf-eks/maniskill_ppo_openvlaoft/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
 #   export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
 #   ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
 #
@@ -130,6 +130,8 @@ spec:
               #     on top of an interpolated node). LoRA is applied by get_model() on the
               #     rollout model from rollout.model.lora_path.
               #   env.eval.rollout_epoch=1  → replaces deprecated algorithm.eval_rollout_epoch
+              #   cluster.component_placement.* → the training config places on GPUs 0-7;
+              #     this Job has 2 (g7e.12xlarge), same placement as the training manifest
               python3 evaluations/eval_embodied_agent.py \
                 --config-path /workspace/RLinf/examples/embodiment/config \
                 --config-name maniskill_ppo_openvlaoft \
@@ -145,7 +147,10 @@ spec:
                 env.eval.max_steps_per_rollout_epoch=1360 \
                 env.eval.video_cfg.save_video=True \
                 env.eval.rollout_epoch=1 \
-                cluster.num_nodes=1
+                cluster.num_nodes=1 \
+                cluster.component_placement.actor=0-1 \
+                cluster.component_placement.env=0 \
+                cluster.component_placement.rollout=1
 
               echo "=== Eval complete. Videos at /fsx/checkpoints/openvlaoft-eval-video/video/ ==="
               ls -la /fsx/checkpoints/openvlaoft-eval-video/video/eval/seed_*/0.mp4 2>/dev/null || \

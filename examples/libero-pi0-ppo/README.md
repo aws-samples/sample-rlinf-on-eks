@@ -138,7 +138,7 @@ The showcase video at the top of this README can be regenerated from any trainin
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
 export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw s3_bucket_name)
-export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
+export CKPT_PATH=/fsx/checkpoints/rlinf-eks/libero_spatial_ppo_openpi/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt   # <CKPT_PATH>/<EXPERIMENT_NAME>/<runner.logger.experiment_name> from the training Job
 
 ./examples/scripts/generate-showcase-video.sh libero-pi0-ppo
 ```

@@ -125,7 +125,10 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-sft-launcher \
 envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
-kubectl logs -f -n "$NAMESPACE" job/dreamzero-sft
+# Wait for the RayJob (~25 min for the 20-step validation run), then check it succeeded.
+# Follow the training log meanwhile with: kubectl logs -f -n "$NAMESPACE" job/dreamzero-sft
+kubectl wait -n "$NAMESPACE" rayjob/dreamzero-sft --for=jsonpath='{.status.jobDeploymentStatus}'=Complete --timeout=90m
+kubectl get -n "$NAMESPACE" rayjob/dreamzero-sft -o jsonpath='{.status.jobStatus}{"\n"}'   # expect: SUCCEEDED
 ```
 
 The launcher (`run_dreamzero_sft_eks.sh`) drives `examples/sft/train_vla_sft.py` with config `libero_sft_dreamzero_14b`. It passes `actor.model.num_action_per_block=16` (the config sets `action_horizon=16` but inherits `num_action_per_block=24` from the DROID model default — a mismatch trips the forward-pass assertion) and adds `+actor.model.metadata_json_path=/fsx/models/metadata-libero.json` (the key is commented out in the config struct, so it must be *added* with the Hydra `+` prefix). SFT writes a **sharded FSDP DCP** checkpoint (`.distcp` + `.metadata`) under `.../global_step_<N>/actor/dcp_checkpoint/`.
@@ -143,7 +146,8 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-convert-launcher \
 
 envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/convert-checkpoint.yaml | kubectl apply -f -
-kubectl logs -f job/dreamzero-convert -n "$NAMESPACE"
+kubectl wait -n "$NAMESPACE" job/dreamzero-convert --for=condition=complete --timeout=60m
+kubectl logs job/dreamzero-convert -n "$NAMESPACE" | tail -3
 # -> .../global_step_20/actor/model_state_dict/full_weights.pt
 ```
 
@@ -164,7 +168,8 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-eval-config \
 
 envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/dreamzero-eval.yaml | kubectl apply -f -
-kubectl logs -f job/dreamzero-eval -n "$NAMESPACE"
+kubectl wait -n "$NAMESPACE" job/dreamzero-eval --for=condition=complete --timeout=90m
+kubectl logs job/dreamzero-eval -n "$NAMESPACE" | grep -a 'eval/success_once' | tail -1
 ```
 
 The eval reports `eval/success_once` and (with `SAVE_VIDEO=True`, the default) writes in-sim rollout videos to `{LOG_DIR}/video/eval/seed_*/0.mp4`. The 14B config uses `total_num_envs=16` (the upstream 5B default of 128 OOMs the 16.48B model co-located with the sim on 8x H200).

@@ -18,7 +18,7 @@
 # Usage:
 #   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
-#   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
+#   export CKPT_PATH=/fsx/checkpoints/rlinf-eks/libero_spatial_ppo_openpi/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
 #   ./examples/scripts/generate-showcase-video.sh libero-pi0-ppo
 #
 # Output:
