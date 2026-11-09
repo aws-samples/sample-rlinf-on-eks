@@ -102,6 +102,11 @@ spec:
             - name: ray-head
               image: ${IMAGE}
               env: &dreamzero_env
+                # Short validation run: 20 steps with one DCP checkpoint at step 20
+                # (~25 min on 2x p5en.48xlarge, ~208 GB). The config defaults are 2000
+                # steps / save every 2000. For a real run, raise both here.
+                - name: HYDRA_OVERRIDES
+                  value: "runner.max_steps=20 runner.save_interval=20 runner.log_interval=1"
                 # KubeRay runs `ray start` as the container command (non-interactive,
                 # ~/.bashrc not sourced). `ray` lives in the dreamzero venv, so prepend
                 # it to PATH or the head/worker crash with "ray: command not found".

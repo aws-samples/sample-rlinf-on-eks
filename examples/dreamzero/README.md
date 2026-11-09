@@ -100,7 +100,7 @@ Downloads the DreamZero-DROID 14B warm-start checkpoint, the umt5-xxl tokenizer,
 A Hugging Face token is optional for these public repos but **recommended**: create a `hf-token` Secret (`kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_...`) to avoid the stricter anonymous per-IP rate limits behind the shared NAT gateway. The Job runs anonymously if the Secret is absent.
 
 ```bash
-envsubst < examples/dreamzero/manifests/model-download.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/model-download.yaml | kubectl apply -f -
 kubectl logs -f job/model-download-dreamzero -n "$NAMESPACE"
 ```
 
@@ -130,7 +130,7 @@ kubectl logs -f -n "$NAMESPACE" job/dreamzero-sft
 
 The launcher (`run_dreamzero_sft_eks.sh`) drives `examples/sft/train_vla_sft.py` with config `libero_sft_dreamzero_14b`. It passes `actor.model.num_action_per_block=16` (the config sets `action_horizon=16` but inherits `num_action_per_block=24` from the DROID model default — a mismatch trips the forward-pass assertion) and adds `+actor.model.metadata_json_path=/fsx/models/metadata-libero.json` (the key is commented out in the config struct, so it must be *added* with the Hydra `+` prefix). SFT writes a **sharded FSDP DCP** checkpoint (`.distcp` + `.metadata`) under `.../global_step_<N>/actor/dcp_checkpoint/`.
 
-To run a real (multi-step) training job instead of the 1-step validation, append Hydra overrides via the launcher's `HYDRA_OVERRIDES` env var (e.g. raise `runner.max_steps` and set a `save_interval`).
+The manifest runs a short validation: `HYDRA_OVERRIDES="runner.max_steps=20 runner.save_interval=20 runner.log_interval=1"` (20 steps, one DCP checkpoint at `global_step_20`, ~25 min on 2x p5en.48xlarge). For a real run, raise `runner.max_steps` and `runner.save_interval` there.
 
 ### 4. Convert checkpoint (DCP shards → `.pt`)
 
@@ -144,10 +144,10 @@ kubectl -n "$NAMESPACE" create configmap dreamzero-convert-launcher \
 envsubst '${IMAGE} ${NAMESPACE}' \
   < examples/dreamzero/manifests/convert-checkpoint.yaml | kubectl apply -f -
 kubectl logs -f job/dreamzero-convert -n "$NAMESPACE"
-# -> .../global_step_1/actor/model_state_dict/full_weights.pt
+# -> .../global_step_20/actor/model_state_dict/full_weights.pt
 ```
 
-(Default `STEP=global_step_1`; override the env in the manifest for a later step.)
+(Default `STEP=global_step_20`, matching the manifest's short SFT; override the env in the manifest for a later step.)
 
 ### 5. LIBERO simulator eval (single-node GPU)
 
@@ -169,7 +169,7 @@ kubectl logs -f job/dreamzero-eval -n "$NAMESPACE"
 
 The eval reports `eval/success_once` and (with `SAVE_VIDEO=True`, the default) writes in-sim rollout videos to `{LOG_DIR}/video/eval/seed_*/0.mp4`. The 14B config uses `total_num_envs=16` (the upstream 5B default of 128 OOMs the 16.48B model co-located with the sim on 8x H200).
 
-The default `max_steps_per_rollout_epoch=15360` runs the full LIBERO-Spatial suite (roughly 16x the ~23 min smoke run, i.e. multiple hours on 1 p5en); for a quick smoke test pass `HYDRA_OVERRIDES="env.eval.max_steps_per_rollout_epoch=960"` (~23 min, 32 trajectories). Add it as an env var on the `dreamzero-eval` container; the launcher appends `HYDRA_OVERRIDES` to its Hydra args.
+The manifest runs a smoke eval: `HYDRA_OVERRIDES="env.eval.max_steps_per_rollout_epoch=960"` (~25 min, 32 trajectories). Remove that env var for the full LIBERO-Spatial suite (config default 15360, roughly 16x longer: several hours on 1 p5en). The launcher appends `HYDRA_OVERRIDES` to its Hydra args.
 
 ### 6. In-sim rollout videos
 

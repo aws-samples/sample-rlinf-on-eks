@@ -93,13 +93,16 @@ export NAMESPACE=rlinf
 envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
 kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 
-# 5. Validate container
+# 5. Validate container (on the gpu-sim pool, where ManiSkill runs; container-test.yaml
+#    is the same test for the gpu-training pool with EFA)
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
-kubectl logs -f job/container-test -n rlinf
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test-sim.yaml | kubectl apply -f -
+kubectl wait --for=condition=complete job/container-test -n rlinf --timeout=20m
+kubectl logs job/container-test -n rlinf | tail -3    # expect: CONTAINER TEST PASSED
+kubectl delete job container-test -n rlinf
 
 # 6. Launch training
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 kubectl logs -f job/rlinf-maniskill-openvlaoft -n rlinf
 ```
 ### Teardown

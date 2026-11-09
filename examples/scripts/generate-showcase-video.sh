@@ -99,7 +99,7 @@ fi
 
 if [[ -z "${S3_BUCKET:-}" ]]; then
   log_fail "S3_BUCKET environment variable not set"
-  echo "  Set it with: export S3_BUCKET=\$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)"
+  echo "  Set it with: export S3_BUCKET=\$(terraform -chdir=infrastructure/storage output -raw s3_bucket_name)"
   exit 1
 fi
 

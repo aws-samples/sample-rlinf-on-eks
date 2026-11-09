@@ -150,18 +150,18 @@ envsubst '${NAMESPACE}' < examples/libero-pi0-ppo/manifests/model-download.yaml 
 
 # 5. Run container validation
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test
 
 # 6. Launch training (pick an example)
 # ManiSkill + OpenVLA-OFT PPO
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
 # LIBERO + pi0 PPO
-envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 
 # DreamZero SFT (multi-node; runs from the unified image, VENV_NAME=dreamzero)
-envsubst < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
 
 # 7. Monitor
 kubectl logs -f job/rlinf-maniskill-openvlaoft    # or whichever example

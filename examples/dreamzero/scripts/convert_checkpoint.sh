@@ -24,7 +24,7 @@ CKPT_PATH="${CKPT_PATH:-/fsx/checkpoints}"
 EXPERIMENT_NAME="${EXPERIMENT_NAME:-dreamzero-libero-sft}"
 # Upstream nests under the config's runner.logger.experiment_name (libero_sft_dreamzero).
 INNER_EXPERIMENT="${INNER_EXPERIMENT:-libero_sft_dreamzero}"
-STEP="${STEP:-global_step_1}"
+STEP="${STEP:-global_step_20}"
 
 CKPT_DIR="${CKPT_PATH}/${EXPERIMENT_NAME}/${INNER_EXPERIMENT}/checkpoints/${STEP}"
 DCP_PATH="${DCP_PATH:-${CKPT_DIR}/actor/dcp_checkpoint}"

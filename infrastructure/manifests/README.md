@@ -32,7 +32,7 @@ kubectl apply -f infrastructure/manifests/smoke-test.yaml
 kubectl logs -f job/smoke-test -n rlinf
 
 # L2: Container validation (after CodeBuild completes)
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 kubectl logs -f job/container-test -n rlinf
 
 # Topology labeler (once, enables topology-aware scheduling for multi-node)

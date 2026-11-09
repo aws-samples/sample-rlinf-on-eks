@@ -119,7 +119,7 @@ export NAMESPACE=rlinf
 envsubst '${IMAGE} ${NAMESPACE}' < examples/wan-openvlaoft-grpo/manifests/wan-openvlaoft-grpo.yaml | kubectl apply -f -
 ```
 
-For a short smoke run, append `runner.max_steps=2` to the `HYDRA_OVERRIDES` value in the training manifest. Keep the shipped config's batch math intact (do not resize `total_num_envs`).
+For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster` does). Keep the shipped config's batch math intact (do not resize `total_num_envs`).
 
 ### 3. Monitor
 

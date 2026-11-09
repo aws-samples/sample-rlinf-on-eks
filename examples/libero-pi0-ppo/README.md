@@ -119,8 +119,10 @@ kubectl logs -f job/model-download-libero-pi0 -n $NAMESPACE
 ```bash
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
-envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 ```
+
+For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster` does).
 
 ### 3. Monitor
 
@@ -135,7 +137,7 @@ The showcase video at the top of this README can be regenerated from any trainin
 ```bash
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
-export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)
+export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw s3_bucket_name)
 export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
 
 ./examples/scripts/generate-showcase-video.sh libero-pi0-ppo

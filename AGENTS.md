@@ -46,7 +46,7 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 # Deploy K8s manifests (IMAGE = <ecr repo>:<tag> required for envsubst)
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 ```
 
 ## Repo Structure (What's Not Obvious)

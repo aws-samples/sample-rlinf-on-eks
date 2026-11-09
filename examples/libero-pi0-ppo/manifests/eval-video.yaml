@@ -51,8 +51,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: training-sa
+      # Same node as the training default (g7e.12xlarge, gpu-sim pool). For p5en, set
+      # instance-type p5en.48xlarge, drop `role: gpu-sim`, and request 8 GPUs (cpu 90, memory 1000Gi).
       nodeSelector:
-        node.kubernetes.io/instance-type: p5en.48xlarge
+        role: gpu-sim
+        node.kubernetes.io/instance-type: g7e.12xlarge
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -135,11 +138,11 @@ spec:
               value: "LIBERO"
           resources:
             requests:
-              nvidia.com/gpu: 8
-              cpu: "90"
-              memory: "1000Gi"
+              nvidia.com/gpu: 2
+              cpu: "40"
+              memory: "400Gi"
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 2
           volumeMounts:
             - name: fsx
               mountPath: /fsx

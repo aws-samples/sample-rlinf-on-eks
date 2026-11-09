@@ -168,7 +168,7 @@ Key outputs: `ecr_repository_url`, `codebuild_project_name`, `codebuild_source_b
 Deploy validation manifests with `envsubst` (requires `IMAGE`, the full `<ecr repo>:<tag>`):
 ```bash
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 ```
 
 ## Terraform State

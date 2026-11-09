@@ -18,7 +18,7 @@
 # Usage (restricted envsubst protects the inline ${...} shell vars):
 #   export IMAGE=<acct>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
 #   export NAMESPACE=dreamzero
-#   # Optionally override STEP (default global_step_1):
+#   # Optionally override STEP (default global_step_20, the SFT manifest's checkpoint):
 #   kubectl -n $NAMESPACE create configmap dreamzero-convert-launcher \
 #     --from-file=convert_checkpoint.sh=examples/dreamzero/scripts/convert_checkpoint.sh \
 #     --dry-run=client -o yaml | kubectl apply -f -
@@ -64,7 +64,7 @@ spec:
             - name: INNER_EXPERIMENT
               value: "libero_sft_dreamzero"
             - name: STEP
-              value: "global_step_1"
+              value: "global_step_20"
           resources:
             requests:
               cpu: "8"

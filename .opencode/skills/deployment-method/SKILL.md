@@ -74,7 +74,7 @@ docker push $ECR_URI:latest
 ```bash
 # Set the image reference (<ecr repo>:<tag>) and deploy with envsubst
 export IMAGE=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"'):latest  # or :<profile>-latest
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
 # Monitor
 kubectl logs -f job/rlinf-training

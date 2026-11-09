@@ -112,8 +112,10 @@ kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 ```bash
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 ```
+
+For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster` does).
 
 ### 3. Monitor
 
@@ -128,7 +130,7 @@ The showcase video at the top of this README can be regenerated from any trainin
 ```bash
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 export NAMESPACE=rlinf
-export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)
+export S3_BUCKET=$(terraform -chdir=infrastructure/storage output -raw s3_bucket_name)
 export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
 export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora  # base adapter staged by model-download.yaml
 

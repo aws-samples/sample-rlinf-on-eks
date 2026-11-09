@@ -9,7 +9,7 @@
 #
 # Uses upstream evaluations/eval_embodied_agent.py (task_type=embodied_eval,
 # rollout + env workers only) with the training config and pipeline_stage_num=2 to match
-# the OpenVLA video layout (16 envs ÷ 4 GPUs ÷ 2 stages = 2 envs/stage → 7 tiles
+# the OpenVLA video layout (16 envs ÷ 2 GPUs ÷ 2 stages = 4 envs/stage → 7 tiles
 # via ManiSkill RecordVideo tiling after stage merge).
 #
 # Prerequisites:
@@ -65,8 +65,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: training-sa
+      # Same node as the training default (g7e.12xlarge, gpu-sim pool). For p5en, set
+      # instance-type p5en.48xlarge, drop `role: gpu-sim`, and request 8 GPUs (cpu 90, memory 1000Gi).
       nodeSelector:
-        node.kubernetes.io/instance-type: p5en.48xlarge
+        role: gpu-sim
+        node.kubernetes.io/instance-type: g7e.12xlarge
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -103,7 +106,7 @@ spec:
               # Key overrides to match OpenVLA video format:
               #   rollout.pipeline_stage_num=2    → matches OpenVLA rollout config
               #   env.eval.enable_offload=True    → uses ManiskillOffloadEnv (capture_image at 512×512)
-              #   env.eval.total_num_envs=16      → 16 envs across 4 GPUs × 2 stages
+              #   env.eval.total_num_envs=16      → 16 envs across 2 GPUs × 2 stages
               #   env.eval.max_steps_per_rollout_epoch=1360  → 17x episode length to accumulate
               #     ~170 real motion frames (OFT chunks 8 actions, so only every 8th frame has motion)
               #   env.eval.video_cfg.save_video=True
@@ -154,11 +157,11 @@ spec:
               value: "/fsx/assets/maniskill"
           resources:
             requests:
-              nvidia.com/gpu: 8
-              cpu: "90"
-              memory: "1000Gi"
+              nvidia.com/gpu: 2
+              cpu: "40"
+              memory: "400Gi"
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 2
           volumeMounts:
             - name: fsx
               mountPath: /fsx
