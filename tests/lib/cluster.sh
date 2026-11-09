@@ -229,7 +229,7 @@ run_level_2() {
 
   # Parse results
   local logs
-  logs=$(get_job_logs container-test)
+  logs=$(get_job_logs container-test rlinf)
 
   local pass_count fail_count
   pass_count=$(echo "$logs" | sed -n 's/.*Results: \([0-9]*\) passed.*/\1/p' | tail -1)
@@ -433,7 +433,7 @@ run_level_4() {
 
   # Check logs for success
   local logs
-  logs=$(get_job_logs model-download-maniskill-openvlaoft)
+  logs=$(get_job_logs model-download-maniskill-openvlaoft rlinf)
 
   if echo "$logs" | grep -q "Download complete"; then
     log_pass "All models downloaded successfully"
