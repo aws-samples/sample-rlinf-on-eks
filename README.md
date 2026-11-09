@@ -31,7 +31,7 @@ Papers: [RLinf System](https://arxiv.org/abs/2509.15965), [RLinf-VLA](https://ar
 
 ![RLinf PPO Infrastructure](examples/diagrams/infra-rlinf-ppo.drawio.svg)
 
-Karpenter provisions a single p5en.48xlarge GPU node on-demand when the training Job is submitted. The pod pulls its container image from ECR (built via CodeBuild's two-stage process) and mounts FSx for Lustre to access pre-trained model weights and write checkpoints. All RL components — actor, rollout, environment, and PPO trainer — run colocated inside a single pod with 8 H200 GPUs allocated via the GPU Operator's device plugin. The actor model occupies GPUs 0-7, rollout inference runs on GPUs 4-7, and the GPU-accelerated ManiSkill3 simulator shares GPUs 0-3 with environment workers. This split maximizes throughput by overlapping simulation rendering with rollout inference on separate GPU subsets. For LIBERO (CPU-based MuJoCo rendering), all components share GPUs 0-7 in a combined placement instead.
+Karpenter provisions a single GPU node on-demand when the training Job is submitted: a g7e.12xlarge (2x RTX PRO 6000) by default for ManiSkill and LIBERO + pi0, or a p5en.48xlarge (8x H200) for the large-GPU settings and Wan. The pod pulls its container image from ECR (built via CodeBuild's two-stage process) and mounts FSx for Lustre to access pre-trained model weights and write checkpoints. All RL components — actor, rollout, environment, and PPO trainer — run colocated inside a single pod with 8 H200 GPUs allocated via the GPU Operator's device plugin. The actor model occupies GPUs 0-7, rollout inference runs on GPUs 4-7, and the GPU-accelerated ManiSkill3 simulator shares GPUs 0-3 with environment workers. This split maximizes throughput by overlapping simulation rendering with rollout inference on separate GPU subsets. For LIBERO (CPU-based MuJoCo rendering), all components share GPUs 0-7 in a combined placement instead.
 
 ### Multi-Node SFT (Supervised Fine-Tuning) (DreamZero)
 
@@ -64,23 +64,16 @@ Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Polic
 # 1. Clone and configure
 git clone https://github.com/aws-samples/sample-rlinf-on-eks.git && cd sample-rlinf-on-eks
 
-# Configure GPU instance type and Availability Zone.
-# Set these to match your Capacity Block reservation (see "GPU Capacity" below).
+# Configure the Region and Availability Zone.
 cat > infrastructure/cluster/terraform.tfvars <<EOF
 region    = "us-east-1"
-target_az = "us-east-1b"  # AZ of your Capacity Block reservation
+target_az = "us-east-1b"  # an AZ that offers g7e (or your reservation's AZ)
 EOF
 
+# ManiSkill (and LIBERO + pi0) run on one g7e.12xlarge (2x RTX PRO 6000) in the gpu-sim pool.
+# DreamZero and Wan need p-class nodes in the gpu-training pool: see "GPU Capacity" below.
 cat > infrastructure/workloads/terraform.tfvars <<EOF
-gpu_instance_types = ["p5.48xlarge"]  # Your reserved instance type
-capacity_type      = ["reserved", "on-demand"]  # reserved = Capacity Block; on-demand = fallback
-gpu_limit          = 64                         # 8 GPUs × max nodes
-
-# Capacity Block reservation selector (required for reserved capacity type)
-# Find your reservation ID in the EC2 console under Capacity Reservations.
-capacity_reservation_selector = [
-  { id = "cr-0123456789abcdef0" }  # Replace with your Capacity Block reservation ID
-]
+enable_sim_pool = true
 EOF
 
 # 2. Provision infrastructure (~20 min)
@@ -162,9 +155,9 @@ IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
 
 | Example | Framework | Target | GPU Requirement | Status |
 |---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
 | [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
 | [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
 | [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S) | Validated (EKS 1.37, 2026-11) |
 
@@ -217,7 +210,18 @@ rlinf-on-eks/
 
 P-class GPU instances (p4d, p5, p5en) have limited availability. In most regions you will need to purchase a [Capacity Block for ML (Machine Learning)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/capacity-blocks-using.html) to reserve access to GPU nodes. You must also have sufficient [service quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html) for the instance type you intend to use.
 
-The tfvars files created in Step 1 configure Karpenter to provision nodes from your Capacity Block. The `target_az` ensures the VPC subnet, FSx filesystem, system nodes, and GPU nodes all deploy in the same Availability Zone as your reserved capacity.
+The ManiSkill and LIBERO + pi0 examples default to one **g7e.12xlarge** (2x RTX PRO 6000 96 GB) in the `gpu-sim` pool (`enable_sim_pool = true`; on-demand, or an ODCR via `sim_capacity_type` / `sim_capacity_reservation_selector`). Wan GRPO and DreamZero need p5en.48xlarge, which usually means a Capacity Block. For those, add the following to `infrastructure/workloads/terraform.tfvars`:
+
+```hcl
+gpu_instance_types = ["p5en.48xlarge"]          # your reserved instance type
+capacity_type      = ["reserved", "on-demand"]  # reserved = Capacity Block; on-demand = fallback
+gpu_limit          = 16                         # 8 GPUs x max nodes
+capacity_reservation_selector = [
+  { id = "cr-0123456789abcdef0" }               # your Capacity Block reservation ID
+]
+```
+
+These settings configure Karpenter to provision nodes from your Capacity Block. The `target_az` ensures the VPC subnet, FSx filesystem, system nodes, and GPU nodes all deploy in the same Availability Zone as your reserved capacity.
 
 | Variable | File | Purpose |
 |----------|------|---------|

@@ -18,7 +18,7 @@ Single-node RL (reinforcement learning) fine-tuning of [OpenVLA-OFT](https://git
 | **Model** | OpenVLA-OFT 7B (LoRA adapters + MLP (Multi-Layer Perceptron) action head on frozen backbone) |
 | **Algorithm** | PPO (Proximal Policy Optimization) |
 | **Environment** | ManiSkill3 (GPU-accelerated sim) |
-| **Hardware** | 1x p5en.48xlarge (8x H200 141GB) |
+| **Hardware** | 1x g7e.12xlarge (2x RTX PRO 6000 96GB) by default; 1x p5en.48xlarge (8x H200 141GB) for the reference run |
 | **EFA** | 4x EFA (Elastic Fabric Adapter) adapters (for future multi-node scale-out) |
 | **Config** | `maniskill_ppo_openvlaoft` |
 | **SFT Checkpoint** | `RLinf/Openvla-oft-SFT-libero10-trajall` |
@@ -43,13 +43,24 @@ The SFT (Supervised Fine-Tuning) checkpoint (`openvla-oft-sft-libero10`) was pre
 
 ![RLinf PPO Infrastructure](../diagrams/infra-rlinf-ppo.drawio.svg)
 
-The infrastructure is shared across all three PPO examples. A single p5en.48xlarge node is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on 8 H200 GPUs, with FSx for Lustre providing shared access to model weights and checkpoints. This example uses the same **split GPU placement** as vanilla OpenVLA (actor on GPUs 0-7, environments on 0-3, rollout on 4-7), but loads an additional artifact from FSx at startup: a LoRA adapter (`rlinf-openvlaoft-maniskill-base-lora`) that bridges the domain gap between the LIBERO (Lifelong Embodied Robot Operation)-trained SFT checkpoint and ManiSkill3. The full 128-environment configuration is critical for OFT — earlier experiments with the quickstart config (8 environments) showed flat learning at 12% success because the sparse reward signal was insufficient for PPO to overcome the larger domain gap. The 64Gi `/dev/shm` shared memory allocation supports high-bandwidth data transfer between GPU-accelerated environment workers and the training process.
+The infrastructure is shared across all three PPO examples. A single GPU node (g7e.12xlarge by default, p5en.48xlarge for the reference run) is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on 8 H200 GPUs, with FSx for Lustre providing shared access to model weights and checkpoints. This example uses the same **split GPU placement** as vanilla OpenVLA (actor on GPUs 0-7, environments on 0-3, rollout on 4-7), but loads an additional artifact from FSx at startup: a LoRA adapter (`rlinf-openvlaoft-maniskill-base-lora`) that bridges the domain gap between the LIBERO (Lifelong Embodied Robot Operation)-trained SFT checkpoint and ManiSkill3. The full 128-environment configuration is critical for OFT — earlier experiments with the quickstart config (8 environments) showed flat learning at 12% success because the sparse reward signal was insufficient for PPO to overcome the larger domain gap. The 64Gi `/dev/shm` shared memory allocation supports high-bandwidth data transfer between GPU-accelerated environment workers and the training process.
 
 ### Model & Algorithm
 
 ![OpenVLA-OFT PPO Model](diagrams/model-openvlaoft-ppo.drawio.svg)
 
 The model diagram shows the complete OFT adaptation pattern. RGB observations from ManiSkill3 flow through the dual vision encoder (DINOv2 ViT-L/14 + SigLIP ViT-SO400M, fused) into 256 patch embeddings, which a projector maps into the Llama 2 7B embedding space. Unlike base OpenVLA which generates discrete action tokens autoregressively, OFT uses **parallel decoding with action chunking** — the LLM produces all action positions simultaneously through a single forward pass, and an MLP action head (2-layer ResNet with L1 regression) maps the hidden states directly to continuous 7-DoF end-effector commands. During RL, the pre-trained Llama 2 backbone weights are frozen — only the LoRA adapter parameters (rank-32, applied to all linear layers) and the MLP action head receive gradient updates from PPO's clipped surrogate objective. This preserves the pre-trained vision-language features while enabling task-specific policy improvement with significantly fewer trainable parameters.
+
+## Running on g-class (default)
+
+The training manifest runs the **full** config (128 envs, global batch 640) on **one g7e.12xlarge** (2x RTX PRO 6000 96 GB) in the `gpu-sim` pool (`enable_sim_pool = true`), with placement actor 0-1, env 0, rollout 1. Measured on EKS 1.37 (2026-11), 2 PPO steps each:
+
+| Instance | GPUs | Step (s) | Training (s) | Rollouts (s) | $/hr (on-demand, us-west-2) | $/step |
+|---|---|---|---|---|---|---|
+| **g7e.12xlarge** (default) | 2x RTX PRO 6000 96 GB | **370–375** | 116–117 | 248–253 | 8.29 | **~0.86** |
+| p5en.48xlarge | 8x H200 141 GB | ~195 | — | — | 63.30 | ~3.43 |
+
+The g7e step is ~1.9x slower but ~4x cheaper per step, and it needs no Capacity Block. Two separate runs gave step-1 train `success_once` of 0.39 and 0.26 (SFT-start reference 0.32; with 128 envs the spread is noise). To use p5en instead, see the comment at the top of `manifests/maniskill-openvlaoft-ppo.yaml`. The convergence run below was produced on p5en.
 
 ## Results
 
@@ -84,7 +95,7 @@ python examples/scripts/plot_training_curve.py \
 
 ### Prerequisites
 
-- EKS (Elastic Kubernetes Service) cluster with GPU node group (p5en.48xlarge)
+- EKS (Elastic Kubernetes Service) cluster with the `gpu-sim` pool enabled (`enable_sim_pool = true`, g7e.12xlarge), or the `gpu-training` pool with p5en.48xlarge
 - FSx for Lustre with pre-staged model weights (`openvla-oft-sft-libero10`)
 - Container image built and pushed to ECR (Elastic Container Registry)
 

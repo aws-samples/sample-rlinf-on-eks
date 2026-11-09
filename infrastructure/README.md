@@ -133,7 +133,7 @@ Configuration (via `infrastructure/workloads/terraform.tfvars`):
 | `target_az` | `""` (from cluster layer) | Passed automatically via deploy.sh |
 | `fsx_az` | `""` (storage output `fsx_az`) | AZ the GPU NodePools are pinned to (FSx's AZ); passed automatically via deploy.sh, `target_az` if empty |
 | `enable_sim_pool` | `false` | Also create the `gpu-sim` NodePool/EC2NodeClass for RT-core simulator GPUs (Isaac Sim; see `examples/isaaclab-gr00t-ppo`) |
-| `sim_instance_types` | `["g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]` | gpu-sim instance types; g7e recommended, g6e fallback; add `g5.*` where neither is offered |
+| `sim_instance_types` | `["g7e.12xlarge", "g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]` | gpu-sim instance types; g7e recommended, g6e fallback; add `g5.*` where neither is offered |
 | `sim_capacity_type` | `["on-demand"]` | gpu-sim capacity types (`["reserved", "on-demand"]` with an ODCR) |
 | `sim_capacity_reservation_selector` | `[]` | gpu-sim ODCR ID or tags; required when `sim_capacity_type` includes `reserved` |
 | `sim_gpu_limit` | `16` | Max GPUs in the gpu-sim pool (added to the namespace GPU quota) |

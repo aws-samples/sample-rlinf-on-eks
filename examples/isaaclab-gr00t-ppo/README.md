@@ -50,7 +50,7 @@ Only GR00T's action head (DiT, ~550M parameters) trains; the ~3B Eagle backbone 
 ## Prerequisites
 
 - The cluster and storage layers from the main [README](../../README.md).
-- A `gpu-sim` NodePool for RT-core GPUs: `enable_sim_pool = true` in the workloads layer. Default instance types: g7e.24/48xlarge, g6e.24/48xlarge.
+- A `gpu-sim` NodePool for RT-core GPUs: `enable_sim_pool = true` in the workloads layer. Default instance types: g7e.12/24/48xlarge, g6e.24/48xlarge (IsaacLab uses the 4-GPU sizes; ManiSkill and π₀ default to g7e.12xlarge).
 - **dcgm-exporter 4.x** if you want GPU profiling metrics (SM_ACTIVE) on Blackwell GPUs (the addons layer sets `dcgm_exporter_version`).
 - **NVIDIA GPU Operator:** the addons layer sets `gdrcopy.enabled=false`. On a cluster not built from this repo, if `ClusterPolicy.spec.gdrcopy.enabled` is `true` while the AMI manages the driver (`driver.enabled: false`), g4dn/g5 nodes never get allocatable GPUs. See [Troubleshooting](#troubleshooting).
 - **NVIDIA license:** building the image with `ACCEPT_ISAAC_SIM_EULA=Y` (or staging Isaac Sim on FSx), and setting `OMNI_KIT_ACCEPT_EULA=YES` in the pods, means you accept the [NVIDIA Isaac Sim / Omniverse license](https://docs.isaacsim.omniverse.nvidia.com/latest/common/NVIDIA_Omniverse_License_Agreement.html). The manifests also set `PRIVACY_CONSENT=Y`, which opts in to Omniverse telemetry/data collection; remove it to opt out.

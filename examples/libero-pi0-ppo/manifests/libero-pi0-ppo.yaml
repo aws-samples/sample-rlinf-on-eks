@@ -8,9 +8,16 @@
 #
 # Image: embodied-maniskill_libero (same image -- includes LIBERO)
 # Venv:  openpi
-# Config: libero_spatial_ppo_openpi_quickstart
+# Config: libero_spatial_ppo_openpi_quickstart (32 envs, actor/env/rollout on all GPUs)
+#
+# Runs on ONE g7e.12xlarge (2x RTX PRO 6000 96 GB, gpu-sim pool) at micro batch 32.
+# EKS 1.37 (2026-11): ~430 s/step, ~$1.0/step on-demand.
+# Large-GPU alternative (8x H200, ~192-224 s/step): set the nodeSelector to
+# `node.kubernetes.io/instance-type: p5en.48xlarge` (gpu-training pool), NUM_GPUS=8,
+# nvidia.com/gpu: 8 (cpu 90, memory 1000Gi).
 #
 # Prerequisites:
+#   - gpu-sim pool enabled (workloads: enable_sim_pool=true; sim_instance_types includes g7e.12xlarge)
 #   - model-download.yaml completed (downloads rlinf-pi0-sft-spatial)
 #   - LIBERO dataset at /fsx/datasets/libero (auto-downloads on first run;
 #     optionally pre-stage via the dataset-preparation skill)
@@ -40,7 +47,8 @@ spec:
       restartPolicy: Never
       serviceAccountName: training-sa
       nodeSelector:
-        node.kubernetes.io/instance-type: p5en.48xlarge
+        role: gpu-sim
+        node.kubernetes.io/instance-type: g7e.12xlarge
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -59,7 +67,7 @@ spec:
             - name: HYDRA_OVERRIDES
               value: "actor.micro_batch_size=32 runner.max_epochs=300"
             - name: NUM_GPUS
-              value: "8"
+              value: "2"
             - name: NUM_NODES
               value: "1"
             - name: CKPT_PATH
@@ -75,11 +83,11 @@ spec:
               value: "all"
           resources:
             requests:
-              nvidia.com/gpu: 8
-              cpu: "90"
-              memory: "1000Gi"
+              nvidia.com/gpu: 2
+              cpu: "40"
+              memory: "400Gi"
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 2
           volumeMounts:
             - name: fsx
               mountPath: /fsx

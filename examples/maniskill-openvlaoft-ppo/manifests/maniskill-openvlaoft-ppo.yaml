@@ -5,14 +5,21 @@
 #
 # Same container image as OpenVLA example, different venv and config.
 # Trains OpenVLA-OFT (fine-tuned variant) on ManiSkill3 using PPO.
-# Uses FULL config with split placement (actor: 0-7, env: 0-3, rollout: 4-7)
-# for maximum parallelism: 128 envs, global_batch_size=640.
+# FULL config (128 envs, global_batch_size=640) on ONE g7e.12xlarge (2x RTX PRO 6000
+# 96 GB, gpu-sim pool): actor 0-1, env 0, rollout 1. EKS 1.37 (2026-11): 370 s/step,
+# ~$0.85/step on-demand.
+#
+# Large-GPU alternative (8x H200, ~195 s/step, ~$3.4/step): set the nodeSelector to
+# `node.kubernetes.io/instance-type: p5en.48xlarge` (gpu-training pool), NUM_GPUS=8,
+# nvidia.com/gpu: 8 (cpu 90, memory 1000Gi), and drop the cluster.component_placement
+# overrides (the config's own placement is actor 0-7, env 0-3, rollout 4-7).
 #
 # Image: embodied-maniskill_libero (same image as all PPO examples)
 # Venv:  openvla-oft
-# Config: maniskill_ppo_openvlaoft (full 8-GPU split placement)
+# Config: maniskill_ppo_openvlaoft
 #
 # Prerequisites:
+#   - gpu-sim pool enabled (workloads: enable_sim_pool=true; sim_instance_types includes g7e.12xlarge)
 #   - model-download.yaml completed (downloads openvla-oft-sft-libero10)
 #
 # Usage:
@@ -40,7 +47,8 @@ spec:
       restartPolicy: Never
       serviceAccountName: training-sa
       nodeSelector:
-        node.kubernetes.io/instance-type: p5en.48xlarge
+        role: gpu-sim
+        node.kubernetes.io/instance-type: g7e.12xlarge
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -62,9 +70,9 @@ spec:
             - name: MODEL_PATH
               value: "/fsx/models/openvla-oft-sft-libero10"
             - name: HYDRA_OVERRIDES
-              value: "actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora env.train.max_steps_per_rollout_epoch=160"
+              value: "actor.model.lora_path=/fsx/models/rlinf-openvlaoft-maniskill-base-lora env.train.max_steps_per_rollout_epoch=160 cluster.component_placement.actor=0-1 cluster.component_placement.env=0 cluster.component_placement.rollout=1"
             - name: NUM_GPUS
-              value: "8"
+              value: "2"
             - name: NUM_NODES
               value: "1"
             - name: CKPT_PATH
@@ -77,11 +85,11 @@ spec:
               value: "all"
           resources:
             requests:
-              nvidia.com/gpu: 8
-              cpu: "90"
-              memory: "1000Gi"
+              nvidia.com/gpu: 2
+              cpu: "40"
+              memory: "400Gi"
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 2
           volumeMounts:
             - name: fsx
               mountPath: /fsx

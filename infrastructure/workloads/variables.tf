@@ -103,7 +103,7 @@ variable "enable_sim_pool" {
 variable "sim_instance_types" {
   description = "Instance types for the gpu-sim pool (RT-core GPUs). g7e (RTX PRO 6000) is recommended, g6e (L40S) the fallback; add g5 where neither is offered. Several sizes widen the net for scarce on-demand capacity."
   type        = list(string)
-  default     = ["g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]
+  default     = ["g7e.12xlarge", "g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]
 }
 
 variable "sim_capacity_type" {

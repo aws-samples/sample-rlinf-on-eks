@@ -18,7 +18,7 @@ Single-node RL (reinforcement learning) fine-tuning of [pi0](https://www.physica
 | **Model** | pi0 (3B params: PaliGemma VLM (Vision-Language Model) + flow-matching action expert) |
 | **Algorithm** | PPO (Proximal Policy Optimization) |
 | **Environment** | LIBERO Spatial (10 tasks, MuJoCo physics) |
-| **Hardware** | 1x p5en.48xlarge (8x H200 141GB) |
+| **Hardware** | 1x g7e.12xlarge (2x RTX PRO 6000 96GB) by default; 1x p5en.48xlarge (8x H200 141GB) for the reference run |
 | **EFA** | 4x EFA (Elastic Fabric Adapter) adapters (for future multi-node scale-out) |
 | **Config** | `libero_spatial_ppo_openpi_quickstart` |
 | **SFT Checkpoint** | `RLinf/RLinf-Pi0-SFT-Spatial-Object-Goal` |
@@ -45,13 +45,24 @@ LIBERO provides 10 tabletop manipulation tasks requiring spatial reasoning — p
 
 ![RLinf PPO Infrastructure](../diagrams/infra-rlinf-ppo.drawio.svg)
 
-The infrastructure is shared across all three PPO examples. A single p5en.48xlarge node is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on 8 H200 GPUs (Graphics Processing Units), with FSx for Lustre providing shared access to model weights, LIBERO dataset, and checkpoints. Unlike the ManiSkill examples which use GPU-accelerated simulation, LIBERO uses **CPU-based MuJoCo rendering** (`MUJOCO_GL=osmesa`), so this example uses **combined GPU placement** — actor, environment, and rollout all share GPUs 0-7 rather than splitting across subsets. The 64 parallel environments run entirely on CPU cores, making rollout throughput CPU-bound rather than GPU-bound. This is why the step time is about the same as ManiSkill's despite half as many environments (v0.3 reference runs: ~228s here with 64 envs vs ~230s for the 128-env ManiSkill OFT example). FSx stores additional LIBERO-specific data: the full dataset directory (`/fsx/datasets/libero`) and a pre-created config file that prevents LIBERO's `__init__.py` from hanging on an interactive `input()` call at import time. The pod sets `ROBOT_PLATFORM=LIBERO` and `LIBERO_DATASET_DIR` environment variables that are not needed by the ManiSkill examples.
+The infrastructure is shared across all three PPO examples. A single GPU node (g7e.12xlarge by default, p5en.48xlarge for the reference run) is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on 8 H200 GPUs (Graphics Processing Units), with FSx for Lustre providing shared access to model weights, LIBERO dataset, and checkpoints. Unlike the ManiSkill examples which use GPU-accelerated simulation, LIBERO uses **CPU-based MuJoCo rendering** (`MUJOCO_GL=osmesa`), so this example uses **combined GPU placement** — actor, environment, and rollout all share GPUs 0-7 rather than splitting across subsets. The 64 parallel environments run entirely on CPU cores, making rollout throughput CPU-bound rather than GPU-bound. This is why the step time is about the same as ManiSkill's despite half as many environments (v0.3 reference runs: ~228s here with 64 envs vs ~230s for the 128-env ManiSkill OFT example). FSx stores additional LIBERO-specific data: the full dataset directory (`/fsx/datasets/libero`) and a pre-created config file that prevents LIBERO's `__init__.py` from hanging on an interactive `input()` call at import time. The pod sets `ROBOT_PLATFORM=LIBERO` and `LIBERO_DATASET_DIR` environment variables that are not needed by the ManiSkill examples.
 
 ### Model & Algorithm
 
 ![LIBERO pi0 PPO Model](diagrams/model-libero-pi0-ppo.drawio.svg)
 
 The model diagram shows the flow-matching PPO loop specific to pi0. SigLIP encodes multi-view RGB observations (agentview + eye-in-hand cameras) into vision tokens, which PaliGemma 2B fuses with task language to produce a context embedding. The flow-matching action expert — a separate Gemma 300M transformer — iteratively denoises a random vector into an action chunk (H future timesteps) over 10 integration steps (δ=0.1), conditioned on this embedding. LIBERO returns observations and sparse rewards that populate the on-policy rollout buffer (trajectories are discarded after each PPO update). The central challenge is computing log-probabilities for a flow model's continuous outputs: RLinf uses the **Flow-SDE (Stochastic Differential Equation)** method, which converts the deterministic ODE (Ordinary Differential Equation) denoising trajectory into a stochastic differential equation, enabling both tractable log-likelihood estimation and built-in exploration. PPO then computes GAE advantages adapted for the action-chunk temporal structure and updates the action expert's parameters through the clipped surrogate loss — with `train_expert_only: True`, the PaliGemma VLM backbone remains frozen during RL, and only the 300M-parameter action expert receives gradient updates.
+
+## Running on g-class (default)
+
+The training manifest runs the quickstart config (32 envs, actor/env/rollout on all GPUs) at `actor.micro_batch_size=32` on **one g7e.12xlarge** (2x RTX PRO 6000 96 GB) in the `gpu-sim` pool (`enable_sim_pool = true`). Measured on EKS 1.37 (2026-11), 2 PPO steps each:
+
+| Instance | GPUs | Step (s) | Training (s) | Rollouts (s) | $/hr (on-demand, us-west-2) | $/step |
+|---|---|---|---|---|---|---|
+| **g7e.12xlarge** (default) | 2x RTX PRO 6000 96 GB | **429–445** | 153–162 | 259–280 | 8.29 | **~1.0** |
+| p5en.48xlarge | 8x H200 141 GB | ~192–224 | — | — | 63.30 | ~3.7 |
+
+The g7e step is ~2x slower but ~3.7x cheaper per step, and it needs no Capacity Block. Train `success_once` was 0.625 and 0.547 for the two steps (the SFT-start reference is 0.578). To use p5en instead, see the comment at the top of `manifests/libero-pi0-ppo.yaml`. The convergence run below was produced on p5en.
 
 ## Results
 
@@ -86,7 +97,7 @@ python examples/scripts/plot_training_curve.py \
 
 ### Prerequisites
 
-- EKS (Elastic Kubernetes Service) cluster with GPU node group (p5en.48xlarge)
+- EKS (Elastic Kubernetes Service) cluster with the `gpu-sim` pool enabled (`enable_sim_pool = true`, g7e.12xlarge), or the `gpu-training` pool with p5en.48xlarge
 - FSx for Lustre with pre-staged model weights (`rlinf-pi0-sft-spatial`) and LIBERO dataset
 - Container image built and pushed to ECR (Elastic Container Registry)
 
