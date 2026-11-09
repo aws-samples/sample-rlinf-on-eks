@@ -68,7 +68,7 @@ envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.
 | Level | What | Timeout | Notes |
 |-------|------|---------|-------|
 | L0 | GPU, EFA, CUDA, FSx smoke test | 10m | `infrastructure/manifests/smoke-test.yaml` |
-| L1 | CodeBuild container build + ECR push | 90m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
+| L1 | CodeBuild container build + ECR push | 150m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
 | L2 | Container validation (12 tests) | 20m | Tests multi-venv, EFA libs, CUDA |
 | L3 | NCCL/EFA bandwidth threshold | 10m smoke / up to 30m full-node | MPIJob via MPI Operator; threshold varies by instance. p5en: full-node `nccl-allreduce-fullnode.yaml` (2x8 GPU x16 EFA, our image), 391 GB/s at 16 GiB (`L3_P5EN_THRESHOLD`) |
 | L4 | Model download to FSx | 30m | Downloads models for all examples |

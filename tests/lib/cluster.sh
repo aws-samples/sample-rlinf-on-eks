@@ -152,8 +152,8 @@ run_level_1() {
   fi
   log_info "Build started: ${build_id}"
 
-  # Step 3: Poll until complete (timeout: 90 min)
-  local timeout=5400
+  # Step 3: Poll until complete (timeout: 150 min, matches the CodeBuild build_timeout)
+  local timeout=9000
   local elapsed=0
   local status="IN_PROGRESS"
 
