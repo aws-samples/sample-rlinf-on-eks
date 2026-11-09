@@ -41,6 +41,15 @@ spec:
         app: dreamzero-convert
     spec:
       restartPolicy: Never
+      # CPU-only, but needs 64-128 GiB RAM: more than the default system nodes
+      # (m5.2xlarge, 32 GiB). Run it on the gpu-training pool, where the SFT just ran
+      # (p5en.48xlarge, 2 TiB); it requests no GPU, so it can share the node.
+      nodeSelector:
+        role: gpu-training
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: convert
           image: ${IMAGE}
