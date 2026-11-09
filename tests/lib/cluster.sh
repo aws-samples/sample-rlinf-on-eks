@@ -564,7 +564,7 @@ run_level_5() {
 
     # Parse logs
     local logs
-    logs=$(get_job_logs "$job_name")
+    logs=$(get_job_logs "$job_name" rlinf)
 
     local elapsed
     elapsed=$(timer_elapsed)
