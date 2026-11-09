@@ -94,6 +94,8 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 - **Pod Identity replaces IRSA**: `enable_irsa = false` in main.tf. CSI addons use `pod_identity_association` blocks. Provider bug: updating addon from IRSA to Pod Identity fails; workaround is `aws eks update-addon` CLI first.
 - **Layered deploy**: always use `infrastructure/deploy.sh` to apply layers in order. Direct `terraform apply` in a single layer requires manually passing `-var` flags from upstream layers.
 - **Karpenter replaces managed GPU node groups**. GPU nodes are provisioned on-demand by Karpenter when training pods are pending. NodePool limits prevent runaway spending.
+- **EKS 1.37** (Karpenter 1.15.1, GPU Operator v26.7.2). Re-validated from a fresh deploy (2026-11): L0, L3 full-node NCCL 489.8 GB/s on 2× p5en, L5 (ManiSkill + OpenVLA-OFT, LIBERO + π₀), L6, Wan GRPO, DreamZero SFT → convert → eval; IsaacLab L2 + Isaac Sim smoke on g7e. Details and the version constraints: `infrastructure/AGENTS.md` ("EKS Version (1.37)").
+- **Karpenter attaches EFA interfaces only when the pod that triggers the launch requests `vpc.amazonaws.com/efa`.** A GPU node launched for a pod without an EFA request comes up with no EFA devices (and the EFA device plugin CrashLoops on it). The p5en workloads (L0, L3, L6, DreamZero) all request EFA.
 
 ### Container Build (Universal)
 - **Image profiles**: `PROFILE=full` (default, 13 venvs, the only `:latest`) or a slim profile from `examples/profiles.env` (`examples`, `maniskill-oft`, `libero-pi0`, `dreamzero`, or custom `INSTALLS`). Profiles are tagged `<profile>-latest`. Manifests take `${IMAGE}` (`<ecr repo>:<tag>`). Details are in `examples/AGENTS.md`.

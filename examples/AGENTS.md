@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-RLinf main@d844e648 (post-v0.4, 2026-10-22) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
+RLinf main@d844e648 (post-v0.4, 2026-10-22), re-validated on EKS 1.37 (2026-11) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
 
 **Paper**: [RLinf System](https://arxiv.org/abs/2509.15965) | [RLinf-VLA](https://arxiv.org/abs/2510.06710) | **Code**: [github.com/RLinf/RLinf](https://github.com/RLinf/RLinf) | **Docs**: [rlinf.readthedocs.io](https://rlinf.readthedocs.io/en/latest/)
 
@@ -76,6 +76,8 @@ LIBERO PPO examples additionally need: `LIBERO_DATASET_DIR=/fsx/datasets/libero`
 
 ### Training
 - **`runner.max_steps=1`** limits training to 1 PPO step (for validation). Use with `runner.save_interval=-1 runner.val_check_interval=-1`.
+- **Wan manifest runs the config's full 1000 steps**: for a short check add `runner.max_steps=2` to its `HYDRA_OVERRIDES`. On EKS 1.37 (2026-11): ~904 s/step on 1 p5en (actor ~236 s, 16 rollout epochs × ~39 s).
+- **DreamZero `convert-checkpoint.yaml` needs 64–128 GiB RAM**: the default system nodes (m5.2xlarge, 32 GiB) cannot run it. Run it on a node with more memory (e.g. a GPU node with a `nvidia.com/gpu` toleration). EKS 1.37 run (2026-11): 20-step SFT on 2× p5en in 25 min (16-shard DCP 208 GB), convert 12 min (`full_weights.pt` 91.7 GB), eval smoke 26 min (32 trajectories).
 - **`run_embodiment.sh` does NOT forward Hydra overrides**. Call `train_embodied_agent.py` directly. The `run_training_eks.sh` launcher supports `HYDRA_OVERRIDES` env var.
 - **MuJoCo headless rendering**: requires `MUJOCO_GL=osmesa` + `PYOPENGL_PLATFORM=osmesa` (not EGL). Set in Dockerfile.
 - **LIBERO's `__init__.py` calls `input()` at import time** -- hangs in containers. Must pre-create `~/.libero/config.yaml` and set `LIBERO_DATASET_DIR`.

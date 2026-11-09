@@ -162,11 +162,13 @@ IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
 
 | Example | Framework | Target | GPU Requirement | Status |
 |---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
-| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S) | Validated |
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S) | Validated (EKS 1.37, 2026-11) |
+
+All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Operator v26.7.2) from a fresh `./infrastructure/deploy.sh --action apply --layer all` in 2026-11: L0 smoke, L3 full-node NCCL on 2× p5en.48xlarge (489.8 GB/s bus bandwidth at 16 GiB over 16 EFA per node), one L5 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + π₀, the L6 multi-node step, two Wan GRPO steps (~904 s/step), and DreamZero 14B SFT on 2× p5en (20 steps, 16-shard DCP checkpoint) → `.pt` conversion → LIBERO eval smoke. The IsaacLab image passed the container test (L2) and the Isaac Sim smoke test on g7e.
 
 ---
 

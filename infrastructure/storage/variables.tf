@@ -45,7 +45,7 @@ variable "fsx_az" {
 }
 
 variable "s3_bucket_name" {
-  description = "S3 data bucket name (FSx data repository). Defaults to <cluster_name>-fsx-data when empty. Set it to keep an existing bucket when the cluster is re-created under a new name (import the bucket into this layer's state first). Must match the cluster layer's training_s3_bucket_name."
+  description = "S3 data bucket name (FSx data repository). Defaults to <cluster_name>-fsx-data when empty. deploy.sh passes the cluster layer's training_s3_bucket_name, so IAM and the bucket always agree."
   type        = string
   default     = ""
 }
