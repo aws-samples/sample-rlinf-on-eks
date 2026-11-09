@@ -657,7 +657,10 @@ run_level_6() {
   local success=0
   while (( elapsed < timeout )); do
     local logs
-    logs=$(kubectl logs training-0 -n rlinf --tail=100 2>/dev/null || echo "")
+    # A StatefulSet restarts pod-0 once training exits 0, so also read the previous
+    # container (the finished run) or the "Global Step: 1/1" line is never seen.
+    logs="$(kubectl logs training-0 -n rlinf --previous --tail=200 2>/dev/null || true)
+$(kubectl logs training-0 -n rlinf --tail=100 2>/dev/null || true)"
 
     # Check for Ray cluster formation
     if echo "$logs" | grep -q "All .* Ray nodes connected" && (( elapsed < 60 )); then
