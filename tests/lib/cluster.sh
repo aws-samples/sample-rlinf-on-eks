@@ -219,7 +219,8 @@ run_level_2() {
   kubectl delete configmap container-test-script -n rlinf --ignore-not-found=true 2>/dev/null || true
 
   # Apply (envsubst for IMAGE, REQUIRED_VENVS)
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/container-test.yaml" | kubectl apply -n rlinf -f -
+  # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+  envsubst '${IMAGE} ${REQUIRED_VENVS}' < "${REPO_ROOT}/infrastructure/manifests/container-test.yaml" | kubectl apply -n rlinf -f -
 
   # Wait for completion
   if ! wait_for_job container-test rlinf 1200; then
@@ -545,7 +546,8 @@ run_level_5() {
     cleanup_job "$job_name" rlinf
 
     # Apply the training step test manifest
-    envsubst < "${REPO_ROOT}/tests/manifests/training-step-test.yaml" | kubectl apply -n rlinf -f -
+    # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+    envsubst '${IMAGE} ${EXAMPLE_NAME} ${VENV_NAME} ${CONFIG_NAME} ${MODEL_PATH} ${EXTRA_OVERRIDES}' < "${REPO_ROOT}/tests/manifests/training-step-test.yaml" | kubectl apply -n rlinf -f -
 
     # Wait for completion (20 min per example, uniform). libero-pi0's single
     # 1-GPU step took ~11 min of run time (~13 min wall incl. image pull) on
@@ -612,11 +614,12 @@ run_level_6() {
   kubectl delete service training-svc -n rlinf --ignore-not-found=true 2>/dev/null || true
 
   # Apply headless service
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/training-service.yaml" | kubectl apply -n rlinf -f -
+  kubectl apply -n rlinf -f "${REPO_ROOT}/infrastructure/manifests/training-service.yaml"
 
   # Apply StatefulSet with overrides for single-step test
   # We need to patch the StatefulSet to add HYDRA_OVERRIDES for max_steps=1
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/training-statefulset.yaml" | kubectl apply -n rlinf -f -
+  # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+  envsubst '${IMAGE}' < "${REPO_ROOT}/infrastructure/manifests/training-statefulset.yaml" | kubectl apply -n rlinf -f -
 
   # Patch to set HYDRA_OVERRIDES for single step
   kubectl set env statefulset/training -n rlinf \
@@ -630,7 +633,7 @@ run_level_6() {
   while (( elapsed < timeout )); do
     local running
     running=$(kubectl get pods -n rlinf -l app=rlinf-multi --no-headers 2>/dev/null | \
-      grep -c "Running" || echo "0")
+      grep -c "Running" || true)
     if (( running >= 2 )); then
       break
     fi
