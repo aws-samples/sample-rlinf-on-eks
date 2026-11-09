@@ -74,6 +74,7 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 # 2. Stage the SFT checkpoint on FSx (once; FSx exports it to its S3 data repository)
 envsubst '${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/model-download.yaml | kubectl apply -f -
+kubectl wait -n $NAMESPACE job/model-download-isaaclab-gr00t --for=condition=complete --timeout=60m
 #    (only if your image was built without ISAAC_SIM_VERSION: stage Isaac Sim on FSx instead)
 # envsubst '${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/stage-isaacsim.yaml | kubectl apply -f -
 
@@ -81,11 +82,15 @@ envsubst '${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/model-download.y
 kubectl -n $NAMESPACE create configmap isaaclab-smoke \
   --from-file=isaaclab_smoke.py=examples/isaaclab-gr00t-ppo/scripts/isaaclab_smoke.py --dry-run=client -o yaml | kubectl apply -f -
 envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-smoke.yaml | kubectl apply -f -
+kubectl wait -n $NAMESPACE job/isaaclab-smoke --for=condition=complete --timeout=30m
+kubectl logs -n $NAMESPACE job/isaaclab-smoke | grep SMOKE_RESULT   # expect "render_ok": true
 
 # 4. PPO training (defaults: g7e.24xlarge or g6e.24xlarge, 4 GPUs, actor.micro_batch_size=64)
 envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml | kubectl apply -f -
 kubectl logs -f job/rlinf-isaaclab-gr00t -n $NAMESPACE   # also tee'd to /fsx/checkpoints/logs/<job>/
 ```
+
+For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster --level 7` does).
 
 ## Customize for your own embodiment and task
 

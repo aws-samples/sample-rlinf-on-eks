@@ -122,7 +122,7 @@ export NAMESPACE=rlinf
 envsubst '${IMAGE} ${NAMESPACE}' < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 ```
 
-For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster` does).
+For a short smoke run, append `runner.max_steps=2 runner.save_interval=-1` to the `HYDRA_OVERRIDES` value in the training manifest before applying it (this is what `./validate.sh --mode cluster --level 7` does).
 
 ### 3. Monitor
 

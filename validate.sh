@@ -8,7 +8,7 @@
 # End-to-end validation from static checks to training step tests.
 # Two modes:
 #   local   - No cluster required. Validates code, formatting, manifests.
-#   cluster - Requires live EKS cluster. Runs levels L0-L6.
+#   cluster - Requires live EKS cluster. Runs levels L0-L7.
 #
 # Usage:
 #   ./validate.sh --mode local
@@ -24,6 +24,7 @@
 #   L4: Model download verification
 #   L5: Training step tests (1 PPO step per example)
 #   L6: Multi-node training step
+#   L7: Example READMEs, run as written (smoke edit only; tests/lib/examples.sh)
 # =============================================================================
 set -euo pipefail
 
@@ -43,10 +44,12 @@ source "${REPO_ROOT}/tests/lib/common.sh"
 source "${REPO_ROOT}/tests/lib/local.sh"
 # shellcheck source=tests/lib/cluster.sh
 source "${REPO_ROOT}/tests/lib/cluster.sh"
+# shellcheck source=tests/lib/examples.sh
+source "${REPO_ROOT}/tests/lib/examples.sh"
 
 # --- Defaults ---
 MODE=""
-MAX_LEVEL=6
+MAX_LEVEL=6   # L7 (example READMEs, hours on p5en) runs only when asked: --level 7
 SKIP_TO=0
 EXAMPLE_FILTER=""
 CONTINUE_ON_ERROR=0
@@ -58,12 +61,14 @@ Usage: $0 --mode <local|cluster> [OPTIONS]
 
 Modes:
   local     Run offline checks (terraform, kubeconform, shellcheck, integrity)
-  cluster   Run live cluster validation levels L0-L6
+  cluster   Run live cluster validation levels L0-L7
 
 Options:
   --level N            Run up to level N (default: 6, cluster mode only)
   --skip-to N          Start from level N (skip earlier levels)
-  --example NAME       Test a specific example in L5 (maniskill-openvlaoft, libero-pi0)
+  --example NAME       L5: maniskill-openvlaoft | libero-pi0
+                       L7: maniskill-openvlaoft-ppo | libero-pi0-ppo | wan-openvlaoft-grpo |
+                           dreamzero | isaaclab-gr00t-ppo
   --continue-on-error  Don't stop on first failure
   -h, --help           Show this help
 
@@ -80,6 +85,10 @@ Environment Variables:
                        role=gpu-training node; p5en.48xlarge selects the full-node test)
   L3_P5EN_THRESHOLD    L3 p5en full-node busbw threshold at 16 GiB (default: 391 GB/s)
   L3_TIMEOUT           L3 full-node MPIJob timeout in seconds (default: 1800)
+  L7_EXAMPLES          L7: space-separated examples (default: all five)
+  L7_VIDEO=1           L7: also regenerate the ManiSkill / pi0 showcase videos
+  L7_STAGE=1           L7: also run DreamZero's FSx staging jobs (README step 2)
+  L7_LOG_DIR           L7: logs + results.tsv (default: validate-logs/L7-<timestamp>)
   NO_COLOR             Disable colored output
 EOF
   exit 0
@@ -149,7 +158,7 @@ run_mode_local() {
 # Cluster Mode
 # =============================================================================
 run_mode_cluster() {
-  log_header "RLinf-on-EKS Cluster Validation (L0-L${MAX_LEVEL})"
+  log_header "RLinf-on-EKS Cluster Validation (L${SKIP_TO}-L${MAX_LEVEL})"
 
   # Verify cluster connectivity
   if ! require_cluster; then
@@ -168,6 +177,7 @@ run_mode_cluster() {
     "4|Model Download|run_level_4"
     "5|Training Steps|run_level_5"
     "6|Multi-Node|run_level_6"
+    "7|Example READMEs|run_level_7"
   )
 
   for level_def in "${levels[@]}"; do
@@ -194,14 +204,14 @@ run_mode_cluster() {
 
     if (( rc == 0 )); then
       # L5 adds its own per-example results, but also record the overall
-      if [[ "$level_func" != "run_level_5" ]]; then
+      if [[ "$level_func" != "run_level_5" && "$level_func" != "run_level_7" ]]; then
         result_add "L${level_num}" "$level_name" "PASS" "$elapsed"
       fi
     elif (( rc == 2 )); then
       # Skip (e.g., L6 with < 2 nodes)
       result_add "L${level_num}" "$level_name" "SKIP" "$elapsed"
     else
-      if [[ "$level_func" != "run_level_5" ]]; then
+      if [[ "$level_func" != "run_level_5" && "$level_func" != "run_level_7" ]]; then
         result_add "L${level_num}" "$level_name" "FAIL" "$elapsed"
       fi
       failed=1
