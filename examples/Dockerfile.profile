@@ -49,7 +49,7 @@ RUN test -n "${INSTALLS}" || { echo "ERROR: INSTALLS is empty"; exit 1; }; \
         # on its first import if ~/.libero/config.yaml is missing, and install.sh imports it from
         # a heredoc (no stdin): EOFError. A placeholder config skips the prompt; install.sh's
         # reset_libero_config then rewrites it with the venv's real paths.
-        mkdir -p ~/.libero && { [ -f ~/.libero/config.yaml ] || echo "benchmark_root: /tmp" > ~/.libero/config.yaml; }; \
+        if [[ $e == *libero* ]]; then mkdir -p ~/.libero && { [ -f ~/.libero/config.yaml ] || echo "benchmark_root: /tmp" > ~/.libero/config.yaml; }; fi; \
         bash requirements/install.sh ${INSTALL_MIRROR_OPTION} --platform ${RLINF_PLATFORM} \
             embodied --venv "$v" --model "$m" --env "$e" $x || exit 1; \
     done

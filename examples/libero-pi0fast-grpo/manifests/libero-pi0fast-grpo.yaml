@@ -86,9 +86,6 @@ spec:
             - name: ray-head
               image: ${IMAGE}
               env: &pi0fast_env
-                # Short validation run: 20 steps with one DCP checkpoint at step 20
-                # (~25 min on 2x p5en.48xlarge, ~208 GB). The config defaults are 2000
-                # steps / save every 2000. For a real run, raise both here.
                 # Empty = upstream's full run (330 steps, eval + checkpoint every 10). For a short
                 # smoke run append "runner.max_steps=2 runner.save_interval=-1" (see the README).
                 - name: HYDRA_OVERRIDES
@@ -111,8 +108,6 @@ spec:
                   value: "libero-pi0fast-grpo"
                 - name: NUM_NODES
                   value: "2"
-                - name: LIBERO_DATASET_DIR
-                  value: "/fsx/datasets/libero"
                 - name: NCCL_DEBUG
                   value: "WARN"
                 - name: FI_PROVIDER
@@ -138,6 +133,8 @@ spec:
                 limits:
                   nvidia.com/gpu: 8
                   vpc.amazonaws.com/efa: 16
+                  # Measured during rollouts (256 envs over 2 pods, EGL rendering): 32-39 of 96
+                  # cores per pod, ~1% of CFS periods throttled, so the limit is not the bottleneck.
                   cpu: "96"
                   memory: "1100Gi"
               volumeMounts: &pi0fast_mounts

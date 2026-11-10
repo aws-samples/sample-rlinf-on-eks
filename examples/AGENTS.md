@@ -242,6 +242,15 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
 | `examples/dreamzero/scripts/run_dreamzero_eval_eks.sh` | LIBERO simulator eval launcher |
 | `examples/dreamzero/scripts/fast_hf_download.py` | Fast parallel HF downloader (bypasses tree API; for large datasets) |
 | `examples/dreamzero/scripts/plot_dreamzero_loss.py` | Plot SFT loss curve from tensorboard |
+| `examples/isaaclab-gr00t-ppo/manifests/model-download.yaml` | Downloads the GR00T N1.5 stack-cube SFT checkpoint |
+| `examples/isaaclab-gr00t-ppo/manifests/isaaclab-smoke.yaml` | 1-GPU Isaac Sim smoke test (boot, env stepping, camera frames) |
+| `examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml` | IsaacLab GR00T PPO training Job (gpu-sim pool, 4 GPUs) |
+| `examples/isaaclab-gr00t-ppo/manifests/stage-isaacsim.yaml` | Optional: stage Isaac Sim on FSx (images built without ISAAC_SIM_VERSION) |
+| `examples/isaaclab-gr00t-ppo/scripts/isaaclab_smoke.py` | Isaac Sim smoke test script (ConfigMap `isaaclab-smoke`) |
+| `examples/isaaclab-gr00t-ppo/scripts/gpu_profile.py` | Per-phase timers + DCGM SM_ACTIVE from Prometheus/AMP |
+| `examples/libero-pi0fast-grpo/manifests/model-download.yaml` | Downloads pi0fast-libero + gated paligemma-3b-pt-224 + tokenizer-lib-mean (pinned revisions; needs hf-token) |
+| `examples/libero-pi0fast-grpo/manifests/libero-pi0fast-grpo.yaml` | KubeRay RayJob for 2-node pi0-FAST GRPO (16 GPUs, EFA) |
+| `examples/libero-pi0fast-grpo/scripts/run_pi0fast_grpo_eks.sh` | pi0-FAST GRPO launcher (mirrors upstream run_embodiment.sh) |
 
 ## SFT Model Weights
 

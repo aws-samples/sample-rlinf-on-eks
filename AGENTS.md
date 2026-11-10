@@ -100,7 +100,7 @@ envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.
 - **Karpenter attaches EFA interfaces only when the pod that triggers the launch requests `vpc.amazonaws.com/efa`.** A GPU node launched for a pod without an EFA request comes up with no EFA devices (and the EFA device plugin CrashLoops on it). The p5en workloads (L0, L3, L6, DreamZero) all request EFA.
 
 ### Container Build (Universal)
-- **Image profiles**: `PROFILE=full` (default, 13 venvs, the only `:latest`) or a slim profile from `examples/profiles.env` (`examples`, `maniskill-oft`, `libero-pi0`, `dreamzero`, or custom `INSTALLS`). Profiles are tagged `<profile>-latest`. Manifests take `${IMAGE}` (`<ecr repo>:<tag>`). Details are in `examples/AGENTS.md`.
+- **Image profiles**: `PROFILE=full` (default, 13 venvs, the only `:latest`) or a slim profile from `examples/profiles.env` (`examples`, `maniskill-oft`, `libero-pi0`, `dreamzero`, `isaaclab-gr00t`, `pi0-fast`, or custom `INSTALLS`). Profiles are tagged `<profile>-latest`. Manifests take `${IMAGE}` (`<ecr repo>:<tag>`). Details are in `examples/AGENTS.md`.
 - **CodeBuild needs ECR pull permission for DLC registry** (`763104351884.dkr.ecr.<region>.amazonaws.com`).
 - **CodeBuild `LOCAL` cache not supported for `BUILD_GENERAL1_2XLARGE`** -- use `NO_CACHE`.
 - **`CODEBUILD_RESOLVED_SOURCE_VERSION` is empty for S3 sources** -- buildspec falls back to timestamp tag.

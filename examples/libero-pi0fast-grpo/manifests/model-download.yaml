@@ -39,18 +39,27 @@ spec:
 
               pip install -q -U huggingface_hub hf_transfer
 
-              # hf_transfer accelerates LARGE multi-GB file downloads (model
-              # checkpoints). It is NOT used for the dataset (many small files).
+              # hf_transfer accelerates the multi-GB checkpoint downloads.
               export HF_HUB_ENABLE_HF_TRANSFER=1
 
+              # PaliGemma is gated: fail fast with a clear message instead of a 403 later.
+              if [ -z "${HF_TOKEN:-}" ]; then
+                echo "ERROR: HF_TOKEN is empty. Create the hf-token Secret with a token whose account"
+                echo "       accepted https://huggingface.co/google/paligemma-3b-pt-224 (see the README)."
+                exit 1
+              fi
+
+              # Revisions pinned as in upstream docs/.../embodied/pi0_fast.rst (RLinf main@d844e648).
               download_model() {
                 local model_id=$1
                 local target_dir=$2
+                local revision=$3
                 echo ""
                 echo "=== Model: $model_id ==="
                 echo "  Target: $target_dir"
-                if [ -f "$target_dir/.download_complete" ]; then
-                  echo "  Completion sentinel found. Skipping."
+                # The sentinel records the revision, so a copy staged at another revision is refreshed.
+                if [ "$(cat "$target_dir/.download_complete" 2>/dev/null)" = "$revision" ]; then
+                  echo "  Already staged at $revision. Skipping."
                   return
                 fi
                 echo "  Downloading..."
@@ -59,64 +68,38 @@ spec:
               from huggingface_hub import snapshot_download
               snapshot_download(
                   repo_id='$model_id',
+                  revision='$revision',
                   local_dir='$target_dir',
                   token=os.environ.get('HF_TOKEN') or None,
               )
               print('  Download complete')
               "
                 # set -e guarantees we only reach this line on a successful download.
-                touch "$target_dir/.download_complete"
+                echo "$revision" > "$target_dir/.download_complete"
                 du -sh "$target_dir" | awk '{print "  Size: " $1}'
               }
 
-              download_dataset() {
-                local repo_id=$1
-                local target_dir=$2
-                echo ""
-                echo "=== Dataset: $repo_id ==="
-                echo "  Target: $target_dir"
-                if [ -f "$target_dir/.download_complete" ]; then
-                  echo "  Completion sentinel found. Skipping."
-                  return
-                fi
-                # LeRobot dataset: many small files, so DISABLE hf_transfer here.
-                HF_HUB_ENABLE_HF_TRANSFER=0 python3 -c "
-              import os
-              from huggingface_hub import snapshot_download
-              snapshot_download(
-                  repo_id='$repo_id',
-                  repo_type='dataset',
-                  local_dir='$target_dir',
-                  token=os.environ.get('HF_TOKEN') or None,
-              )
-              print('  Download complete')
-              "
-                # set -e guarantees we only reach this line on a successful download.
-                touch "$target_dir/.download_complete"
-                du -sh "$target_dir" | awk '{print "  Size: " $1}'
-              }
-
-              # DreamZero-DROID 14B warm-start checkpoint
-              download_model "lerobot/pi0fast-libero" "/fsx/models/pi0fast-libero"
+              download_model "lerobot/pi0fast-libero" "/fsx/models/pi0fast-libero" \
+                840f4b503f4c09110421c33c810a85b6684fd658
               # Gated: accept the license at https://huggingface.co/google/paligemma-3b-pt-224
               # with the account whose token is in the hf-token Secret.
-              download_model "google/paligemma-3b-pt-224" "/fsx/models/paligemma-3b-pt-224"
-              download_model "jadechoghari/tokenizer-lib-mean" "/fsx/models/tokenizer-lib-mean"
+              download_model "google/paligemma-3b-pt-224" "/fsx/models/paligemma-3b-pt-224" \
+                35e4f46485b4d07967e7e9935bc3786aad50687c
+              download_model "jadechoghari/tokenizer-lib-mean" "/fsx/models/tokenizer-lib-mean" \
+                79ae83e3cbd8786dcb84b628569f8d076ca8151e
 
               echo ""
               echo "=== Download complete ==="
               du -sh /fsx/models/pi0fast-libero /fsx/models/paligemma-3b-pt-224 /fsx/models/tokenizer-lib-mean
           env:
-            # Optional Hugging Face token. The default repos are public (download
-            # works without it), but passing a token avoids the stricter
-            # anonymous per-IP rate limits and is required for gated repos.
-            # optional: true -> the Job runs fine if the hf-token Secret is absent.
+            # Required: google/paligemma-3b-pt-224 is gated. Without the hf-token Secret the
+            # pod does not start (CreateContainerConfigError: secret "hf-token" not found).
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: hf-token
                   key: HF_TOKEN
-                  optional: true
+                  optional: false
           resources:
             requests:
               cpu: "4"

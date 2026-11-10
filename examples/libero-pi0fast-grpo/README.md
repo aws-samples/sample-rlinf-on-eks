@@ -57,7 +57,7 @@ Agent and wrist camera images go through π₀-FAST's SigLIP encoder into the Pa
 ### Prerequisites
 
 - 2x p5en.48xlarge reachable by the `gpu-training` NodePool (see "GPU Capacity" in the main [README](../../README.md); a Capacity Block is the usual way to get them), FSx `fsx-claim`, and `training-sa`, all created by `infrastructure/deploy.sh`.
-- A Hugging Face token in the `hf-token` Secret whose account has accepted the [PaliGemma license](https://huggingface.co/google/paligemma-3b-pt-224) (gated; without it the download fails with `GatedRepoError: 403`).
+- A Hugging Face token in the `hf-token` Secret (`kubectl create secret generic hf-token -n "$NAMESPACE" --from-literal=HF_TOKEN=hf_...`) whose account has accepted the [PaliGemma license](https://huggingface.co/google/paligemma-3b-pt-224). Required: PaliGemma is gated (without a token the download Job does not start; with an unapproved one it fails with `GatedRepoError: 403`).
 
 ```bash
 export NAMESPACE=rlinf
@@ -80,7 +80,7 @@ envsubst '${NAMESPACE}' < examples/libero-pi0fast-grpo/manifests/model-download.
 kubectl wait -n "$NAMESPACE" job/model-download-libero-pi0fast --for=condition=complete --timeout=60m
 ```
 
-Stages `/fsx/models/pi0fast-libero`, `/fsx/models/paligemma-3b-pt-224` (11 GB) and `/fsx/models/tokenizer-lib-mean`.
+Stages `/fsx/models/pi0fast-libero`, `/fsx/models/paligemma-3b-pt-224` (11 GB) and `/fsx/models/tokenizer-lib-mean`, at the revisions upstream pins (`840f4b50…`, `35e4f464…`, `79ae83e3…`).
 
 ### 3. Launch training
 
@@ -98,7 +98,9 @@ The manifest runs upstream's full schedule (330 steps, eval and checkpoint every
 ### 4. Monitor
 
 ```bash
-kubectl wait -n "$NAMESPACE" rayjob/libero-pi0fast-grpo --for=jsonpath='{.status.jobDeploymentStatus}'=Complete --timeout=24h
+# Smoke run (2 steps + eval, ~2 h): wait for the RayJob, then check it succeeded.
+# The full 330-step schedule takes ~11.5 days: follow the log below instead of waiting.
+kubectl wait -n "$NAMESPACE" rayjob/libero-pi0fast-grpo --for=jsonpath='{.status.jobDeploymentStatus}'=Complete --timeout=4h
 kubectl get -n "$NAMESPACE" rayjob/libero-pi0fast-grpo -o jsonpath='{.status.jobStatus}{"\n"}'   # expect: SUCCEEDED
 # Training log, also tee'd to /fsx/checkpoints/libero-pi0fast-grpo/train-<ts>.log:
 #   kubectl logs -f -n "$NAMESPACE" job/libero-pi0fast-grpo
