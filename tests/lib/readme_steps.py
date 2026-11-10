@@ -62,6 +62,15 @@ if stop_at is not None:
     out = out[:idx]
 
 if harness:
+    # join `envsubst '...' \` + `  < manifest | kubectl apply -f -` continuation lines first
+    joined = []
+    for ln in out:
+        if joined and joined[-1].rstrip().endswith('\\') and joined[-1].lstrip().startswith('envsubst ') \
+                and ln.lstrip().startswith('< '):
+            joined[-1] = joined[-1].rstrip()[:-1].rstrip() + ' ' + ln.strip()
+        else:
+            joined.append(ln)
+    out = joined
     res = []
     for ln in out:
         m = re.match(r'\s*kubectl logs -f (?:-n "?\$\w+"? )?job/([\w-]+)', ln)
@@ -75,7 +84,8 @@ if harness:
             continue
         m = re.match(r"(\s*envsubst '[^']*' )< (\S+/manifests/[\w-]+\.yaml)( \| kubectl apply -f -.*)", ln)
         if m and m.group(2).endswith(tuple(f'/{s}.yaml' for s in (
-                'maniskill-openvlaoft-ppo', 'libero-pi0-ppo', 'wan-openvlaoft-grpo', 'isaaclab-gr00t-ppo'))):
+                'maniskill-openvlaoft-ppo', 'libero-pi0-ppo', 'wan-openvlaoft-grpo', 'isaaclab-gr00t-ppo',
+                'libero-pi0fast-grpo'))):
             res.append(f'{m.group(1)}< <(${{SMOKE_FILTER:-cat}} {m.group(2)}){m.group(3)}')
             continue
         res.append(ln)

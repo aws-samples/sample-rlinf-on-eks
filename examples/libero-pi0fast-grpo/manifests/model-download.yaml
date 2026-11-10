@@ -1,0 +1,133 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Stage the pi0-FAST GRPO artifacts on FSx (upstream docs/.../embodied/pi0_fast.rst):
+#   lerobot/pi0fast-libero          -> /fsx/models/pi0fast-libero          (base policy)
+#   google/paligemma-3b-pt-224      -> /fsx/models/paligemma-3b-pt-224     (text tokenizer; gated)
+#   jadechoghari/tokenizer-lib-mean -> /fsx/models/tokenizer-lib-mean      (FAST action tokenizer)
+# Needs the hf-token Secret (paligemma is gated). Runs on a system node; no GPU.
+#
+# Usage:
+#   envsubst '${NAMESPACE}' < examples/libero-pi0fast-grpo/manifests/model-download.yaml | kubectl apply -f -
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-libero-pi0fast
+  namespace: ${NAMESPACE}
+  labels:
+    app: model-download
+    example: libero-pi0fast-grpo
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 7200
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  LIBERO-10 pi0-FAST GRPO: Model Download"
+              echo "============================================"
+
+              pip install -q -U huggingface_hub hf_transfer
+
+              # hf_transfer accelerates LARGE multi-GB file downloads (model
+              # checkpoints). It is NOT used for the dataset (many small files).
+              export HF_HUB_ENABLE_HF_TRANSFER=1
+
+              download_model() {
+                local model_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Model: $model_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/.download_complete" ]; then
+                  echo "  Completion sentinel found. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              import os
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$model_id',
+                  local_dir='$target_dir',
+                  token=os.environ.get('HF_TOKEN') or None,
+              )
+              print('  Download complete')
+              "
+                # set -e guarantees we only reach this line on a successful download.
+                touch "$target_dir/.download_complete"
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              download_dataset() {
+                local repo_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Dataset: $repo_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/.download_complete" ]; then
+                  echo "  Completion sentinel found. Skipping."
+                  return
+                fi
+                # LeRobot dataset: many small files, so DISABLE hf_transfer here.
+                HF_HUB_ENABLE_HF_TRANSFER=0 python3 -c "
+              import os
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$repo_id',
+                  repo_type='dataset',
+                  local_dir='$target_dir',
+                  token=os.environ.get('HF_TOKEN') or None,
+              )
+              print('  Download complete')
+              "
+                # set -e guarantees we only reach this line on a successful download.
+                touch "$target_dir/.download_complete"
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              # DreamZero-DROID 14B warm-start checkpoint
+              download_model "lerobot/pi0fast-libero" "/fsx/models/pi0fast-libero"
+              # Gated: accept the license at https://huggingface.co/google/paligemma-3b-pt-224
+              # with the account whose token is in the hf-token Secret.
+              download_model "google/paligemma-3b-pt-224" "/fsx/models/paligemma-3b-pt-224"
+              download_model "jadechoghari/tokenizer-lib-mean" "/fsx/models/tokenizer-lib-mean"
+
+              echo ""
+              echo "=== Download complete ==="
+              du -sh /fsx/models/pi0fast-libero /fsx/models/paligemma-3b-pt-224 /fsx/models/tokenizer-lib-mean
+          env:
+            # Optional Hugging Face token. The default repos are public (download
+            # works without it), but passing a token avoids the stricter
+            # anonymous per-IP rate limits and is required for gated repos.
+            # optional: true -> the Job runs fine if the hf-token Secret is absent.
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: hf-token
+                  key: HF_TOKEN
+                  optional: true
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

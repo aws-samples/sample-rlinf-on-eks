@@ -1,0 +1,200 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# LIBERO-10 pi0-FAST GRPO: upstream libero_10_grpo_pi0_fast on 2x p5en.48xlarge (16x H200)
+#
+# Upstream's two-node, 16-GPU reference config (docs/.../embodied/pi0_fast.rst): LeRobot
+# PI0FastPolicy, all-linear LoRA rank 16, token-level GRPO, 256 envs x 4 rollout epochs =
+# 1024 trajectories per update, group size 8. KubeRay RayJob: Ray head + 1 worker, one per
+# p5en (podAntiAffinity), EFA for the actor's NCCL (FSDP NO_SHARD = data parallel over 16).
+#
+# Prerequisites:
+#   - Image: PROFILE=pi0-fast (examples/profiles.env), ${IMAGE} = <ecr repo>:pi0-fast-latest
+#   - Models on FSx: manifests/model-download.yaml (needs the hf-token Secret; PaliGemma is gated)
+#   - ConfigMap libero-pi0fast-grpo-launcher with scripts/run_pi0fast_grpo_eks.sh
+#
+# Usage (restricted envsubst: the entrypoint's inline bash must stay literal):
+#   kubectl -n "$NAMESPACE" create configmap libero-pi0fast-grpo-launcher \
+#     --from-file=run_pi0fast_grpo_eks.sh=examples/libero-pi0fast-grpo/scripts/run_pi0fast_grpo_eks.sh \
+#     --dry-run=client -o yaml | kubectl apply -f -
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/libero-pi0fast-grpo/manifests/libero-pi0fast-grpo.yaml | kubectl apply -f -
+---
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: libero-pi0fast-grpo
+  namespace: ${NAMESPACE}
+  labels:
+    app: libero-pi0fast-grpo
+    reference: rlinf
+    example: libero-pi0fast-grpo
+spec:
+  # Run the launcher on the head once the Ray cluster is ready. The launcher
+  # copies itself from the mounted ConfigMap (if present) then execs training.
+  entrypoint: >-
+    bash -c '
+    if [ -f /tmp/scripts/run_pi0fast_grpo_eks.sh ]; then
+      cp /tmp/scripts/run_pi0fast_grpo_eks.sh /workspace/eks/scripts/run_pi0fast_grpo_eks.sh;
+      chmod +x /workspace/eks/scripts/run_pi0fast_grpo_eks.sh;
+    fi;
+    bash /workspace/eks/scripts/run_pi0fast_grpo_eks.sh'
+  shutdownAfterJobFinishes: true
+  ttlSecondsAfterFinished: 600
+  # The KubeRay submitter pod runs `ray job submit` against the head. It does NOT
+  # inherit the head/worker container env, and `ray` lives in the pi0_fast venv,
+  # so without this PATH it fails with "ray: command not found". Reuse the head image.
+  submitterPodTemplate:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: ray-job-submitter
+          image: ${IMAGE}
+          env:
+            - name: PATH
+              value: "/opt/venv/pi0_fast/bin:/opt/amazon/openmpi/bin:/opt/amazon/efa/bin:/opt/gdrcopy/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  rayClusterSpec:
+    rayVersion: "2.55.1"
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: "0.0.0.0"
+        num-gpus: "8"
+      template:
+        metadata:
+          labels:
+            app: libero-pi0fast-grpo
+            example: libero-pi0fast-grpo
+          annotations:
+            karpenter.sh/do-not-disrupt: "true"
+        spec:
+          serviceAccountName: training-sa
+          terminationGracePeriodSeconds: 120
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: app
+                        operator: In
+                        values:
+                          - libero-pi0fast-grpo
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: ray-head
+              image: ${IMAGE}
+              env: &pi0fast_env
+                # Short validation run: 20 steps with one DCP checkpoint at step 20
+                # (~25 min on 2x p5en.48xlarge, ~208 GB). The config defaults are 2000
+                # steps / save every 2000. For a real run, raise both here.
+                # Empty = upstream's full run (330 steps, eval + checkpoint every 10). For a short
+                # smoke run append "runner.max_steps=2 runner.save_interval=-1" (see the README).
+                - name: HYDRA_OVERRIDES
+                  value: ""
+                - name: PATH
+                  value: "/opt/venv/pi0_fast/bin:/opt/amazon/openmpi/bin:/opt/amazon/efa/bin:/opt/gdrcopy/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                - name: VENV_NAME
+                  value: "pi0_fast"
+                - name: CONFIG_NAME
+                  value: "libero_10_grpo_pi0_fast"
+                - name: MODEL_PATH
+                  value: "/fsx/models/pi0fast-libero"
+                - name: TEXT_TOKENIZER
+                  value: "/fsx/models/paligemma-3b-pt-224"
+                - name: ACTION_TOKENIZER
+                  value: "/fsx/models/tokenizer-lib-mean"
+                - name: CKPT_PATH
+                  value: "/fsx/checkpoints"
+                - name: EXPERIMENT_NAME
+                  value: "libero-pi0fast-grpo"
+                - name: NUM_NODES
+                  value: "2"
+                - name: LIBERO_DATASET_DIR
+                  value: "/fsx/datasets/libero"
+                - name: NCCL_DEBUG
+                  value: "WARN"
+                - name: FI_PROVIDER
+                  value: "efa"
+                - name: FI_EFA_USE_DEVICE_RDMA
+                  value: "1"
+                - name: FI_EFA_FORK_SAFE
+                  value: "1"
+                - name: PYTORCH_CUDA_ALLOC_CONF
+                  value: "expandable_segments:True"
+                - name: TOKENIZERS_PARALLELISM
+                  value: "true"
+                - name: TORCH_NCCL_AVOID_RECORD_STREAMS
+                  value: "1"
+                - name: NVIDIA_DRIVER_CAPABILITIES
+                  value: "all"
+              resources: &pi0fast_resources
+                requests:
+                  nvidia.com/gpu: 8
+                  vpc.amazonaws.com/efa: 16
+                  cpu: "90"
+                  memory: "1000Gi"
+                limits:
+                  nvidia.com/gpu: 8
+                  vpc.amazonaws.com/efa: 16
+                  cpu: "96"
+                  memory: "1100Gi"
+              volumeMounts: &pi0fast_mounts
+                - name: fsx
+                  mountPath: /fsx
+                - name: dshm
+                  mountPath: /dev/shm
+                - name: launcher
+                  mountPath: /tmp/scripts
+                  readOnly: true
+          volumes: &pi0fast_volumes
+            - name: fsx
+              persistentVolumeClaim:
+                claimName: fsx-claim
+            - name: dshm
+              emptyDir:
+                medium: Memory
+                sizeLimit: "128Gi"
+            - name: launcher
+              configMap:
+                name: libero-pi0fast-grpo-launcher
+                optional: false
+    workerGroupSpecs:
+      - groupName: worker
+        replicas: 1
+        minReplicas: 1
+        maxReplicas: 1
+        rayStartParams:
+          num-gpus: "8"
+        template:
+          metadata:
+            labels:
+              app: libero-pi0fast-grpo
+              example: libero-pi0fast-grpo
+            annotations:
+              karpenter.sh/do-not-disrupt: "true"
+          spec:
+            serviceAccountName: training-sa
+            terminationGracePeriodSeconds: 120
+            tolerations:
+              - key: nvidia.com/gpu
+                operator: Exists
+                effect: NoSchedule
+            affinity:
+              podAntiAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  - labelSelector:
+                      matchExpressions:
+                        - key: app
+                          operator: In
+                          values:
+                            - libero-pi0fast-grpo
+                    topologyKey: kubernetes.io/hostname
+            containers:
+              - name: ray-worker
+                image: ${IMAGE}
+                env: *pi0fast_env
+                resources: *pi0fast_resources
+                volumeMounts: *pi0fast_mounts
+            volumes: *pi0fast_volumes
