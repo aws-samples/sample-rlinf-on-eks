@@ -6,7 +6,8 @@
 # Isaac Sim 5.1 needs RT-core GPUs (not supported on A100/H100/H200), so this runs on the
 # `gpu-sim` pool. Validated default: 4 GPUs, env/rollout/actor all on 0-3 (upstream's
 # placement), actor.micro_batch_size=64, on g7e.24xlarge (4x RTX PRO 6000, recommended) or
-# g6e.24xlarge (4x L40S). 4 GPUs were as fast as 8; batch 128 gave no gain. See the README
+# g6e.24xlarge (4x L40S); the .48xlarge sizes are allowed too (the pod uses 4 of their 8 GPUs).
+# 4 GPUs were as fast as 8; batch 128 gave no gain. See the README
 # Results. For 4x A10G (g5.12xlarge): actor.micro_batch_size=32 actor.enable_offload=True
 # without eval; actor.micro_batch_size=8 actor.enable_offload=True with eval
 # (runner.val_check_interval > 0).
@@ -56,7 +57,8 @@ spec:
               - matchExpressions:
                   - key: node.kubernetes.io/instance-type
                     operator: In
-                    values: ["g7e.24xlarge", "g6e.24xlarge"]
+                    # .48xlarge (8 GPUs) widens the net for scarce capacity; the pod still uses 4
+                    values: ["g7e.24xlarge", "g6e.24xlarge", "g7e.48xlarge", "g6e.48xlarge"]
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists

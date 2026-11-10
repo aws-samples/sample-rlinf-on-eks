@@ -42,7 +42,10 @@ def expand(text):
     def rep(m):
         fam, sizes = m.group(1), m.group(2).split('/')
         return ' '.join(f'{fam}.{z}xlarge' for z in sizes)
-    return re.sub(r'\b([a-z][a-z0-9]*)\.((?:[0-9]+/)+[0-9]+)xlarge', rep, text)
+    text = re.sub(r'\b([a-z][a-z0-9]*)\.((?:[0-9]+/)+[0-9]+)xlarge', rep, text)
+    # g7e/g6e.48xlarge -> g7e.48xlarge g6e.48xlarge
+    return re.sub(r'\b((?:[a-z][a-z0-9]*/)+[a-z][a-z0-9]*)\.([0-9]*x?large)\b',
+                  lambda m: ' '.join(f'{f}.{m.group(2)}' for f in m.group(1).split('/')), text)
 
 
 for readme in sorted(glob.glob('examples/*/README.md')):

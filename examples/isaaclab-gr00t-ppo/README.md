@@ -41,7 +41,7 @@ The EKS pieces here are the same for both, because both need RT-core GPUs:
 | Isaac Sim 5.1 | In the image, `/opt/isaacsim` | Standalone install (19 GB unpacked) baked in at build time (`ISAAC_SIM_VERSION=5.1.0`, `ACCEPT_ISAAC_SIM_EULA=Y`), like NVIDIA's own `isaac-sim` containers. Your build downloads it into your private ECR; nothing is redistributed. Optional instead: stage it on FSx with `stage-isaacsim.yaml` (`ISAAC_PATH=auto` uses the image copy if present, else FSx) |
 | Shader / kit cache | FSx `/fsx/isaacsim-cache` | ~1 GB, shared across nodes; first boot compiles shaders (~80 s extra) |
 | SFT checkpoint | FSx `/fsx/models/RLinf-Gr00t-SFT-Stack-cube` | `RLinf/RLinf-Gr00t-SFT-Stack-cube`, 7.6 GB. The Eagle VLM backbone ships inside the gr00t package |
-| GPU node | `gpu-sim` NodePool: **g7e.24xlarge** (4× RTX PRO 6000 96 GB) or **g6e.24xlarge** (4× L40S 48 GB). Image layers and pod scratch on the NVMe instance store (`instanceStorePolicy: RAID0`; 2×3.8 TB on g7e.24xlarge) | 4 GPUs; env workers (Isaac Sim), rollout and actor all on GPUs 0-3 (upstream's placement) |
+| GPU node | `gpu-sim` NodePool: **g7e.24xlarge** (4× RTX PRO 6000 96 GB) or **g6e.24xlarge** (4× L40S 48 GB); the manifest also accepts g7e.48xlarge / g6e.48xlarge when the 4-GPU sizes are scarce (it uses 4 of 8 GPUs). Image layers and pod scratch on the NVMe instance store (`instanceStorePolicy: RAID0`; 2×3.8 TB on g7e.24xlarge) | 4 GPUs; env workers (Isaac Sim), rollout and actor all on GPUs 0-3 (upstream's placement) |
 
 Only GR00T's action head (DiT, ~550M parameters) trains; the ~3B Eagle backbone is frozen. That is why 4 GPUs are enough and a bigger trainer brings little: on g7e, about 58% of each step is Isaac Sim rollouts.
 
@@ -85,7 +85,7 @@ envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaacla
 kubectl wait -n $NAMESPACE job/isaaclab-smoke --for=condition=complete --timeout=30m
 kubectl logs -n $NAMESPACE job/isaaclab-smoke | grep SMOKE_RESULT   # expect "render_ok": true
 
-# 4. PPO training (defaults: g7e.24xlarge or g6e.24xlarge, 4 GPUs, actor.micro_batch_size=64)
+# 4. PPO training (g7e.24xlarge or g6e.24xlarge, or a .48xlarge; 4 GPUs, actor.micro_batch_size=64)
 envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml | kubectl apply -f -
 kubectl logs -f job/rlinf-isaaclab-gr00t -n $NAMESPACE   # also tee'd to /fsx/checkpoints/logs/<job>/
 ```

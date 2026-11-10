@@ -19,7 +19,7 @@
         <mxCell id="prom" parent="1" style="rounded=0;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Prometheus + Grafana&lt;/b&gt;&lt;br&gt;DCGM SM_ACTIVE per phase" vertex="1">
           <mxGeometry height="46" width="296" x="612" y="106" as="geometry" />
         </mxCell>
-        <mxCell id="node" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=#F5F5F5;labelBackgroundColor=none;html=1;whiteSpace=wrap;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="RT-core GPU node: g7e.24xlarge (4× RTX PRO 6000 96 GB) — fallback g6e.24xlarge (4× L40S 48 GB) — image layers on NVMe (RAID0)" vertex="1">
+        <mxCell id="node" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=#F5F5F5;labelBackgroundColor=none;html=1;whiteSpace=wrap;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="RT-core GPU node: g7e.24xlarge (4× RTX PRO 6000 96 GB) — fallback g6e.24xlarge (4× L40S 48 GB); also g7e/g6e.48xlarge — NVMe (RAID0)" vertex="1">
           <mxGeometry height="310" width="860" x="60" y="180" as="geometry" />
         </mxCell>
         <mxCell id="pod" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=#FFFFFF;labelBackgroundColor=none;html=1;whiteSpace=wrap;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="Pod: rlinf-isaaclab-gr00t (Job, 4 GPUs) — RLinf on Ray, one node" vertex="1">
