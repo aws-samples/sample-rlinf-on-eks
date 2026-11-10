@@ -46,17 +46,28 @@ l7_run_steps() {
 # l7_record EXAMPLE STEP STATUS SECONDS LOG -- one TSV row; instance type and step time
 # come from the Jobs/RayJobs the step created (named in its `kubectl apply` output).
 l7_record() {
-  local ex="$1" name="$2" status="$3" secs="$4" log="$5" inst="" st="" job pod node
+  local ex="$1" name="$2" status="$3" secs="$4" log="$5" inst="" st="" img="" job pod node v
   if [[ -n "$log" && -f "$log" ]]; then
     while read -r job; do
       pod=$(kubectl get pods -n "$NAMESPACE" -l "job-name=${job}" -o jsonpath='{.items[-1].metadata.name}' 2>/dev/null) || true
+      if [[ -z "$pod" ]]; then  # RayJob: head pod of its RayCluster
+        pod=$(kubectl get pods -n "$NAMESPACE" -l "ray.io/node-type=head" -o name 2>/dev/null | grep -m1 "/${job}-" | cut -d/ -f2) || true
+      fi
+      [[ -n "$pod" ]] || continue
       node=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.nodeName}' 2>/dev/null) || true
-      [[ -n "$node" ]] && inst=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null)
-      st=$(kubectl logs -n "$NAMESPACE" "job/${job}" 2>/dev/null | LC_ALL=C sed 's/\x1b\[[0-9;]*m//g' \
-        | LC_ALL=C grep -aoE 'Step Time: [0-9.]+s' | tail -1 | awk '{print $3}') || true
-    done < <(grep -aoE '^job\.batch/[a-z0-9-]+ (created|configured)' "$log" | awk '{print $1}' | cut -d/ -f2)
+      v=$(kubectl get pod "$pod" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].image}' 2>/dev/null) || true
+      [[ -n "$v" ]] && img="$v"
+      if [[ -n "$node" ]]; then
+        v=$(kubectl get node "$node" -o jsonpath='{.metadata.labels.node\.kubernetes\.io/instance-type}' 2>/dev/null) || true
+        [[ -n "$v" ]] && inst="$v"
+      fi
+      v=$(kubectl logs -n "$NAMESPACE" "$pod" 2>/dev/null | LC_ALL=C sed 's/\x1b\[[0-9;]*m//g' \
+        | LC_ALL=C grep -aoE 'Step Time: [0-9.]+s' | tail -1 | awk '{print $3}' | tr -d s) || true
+      [[ -n "$v" ]] && st="$v"
+    done < <(grep -aoE '^(job\.batch|rayjob\.ray\.io)/[a-z0-9-]+ (created|configured)' "$log" | awk '{print $1}' | cut -d/ -f2)
   fi
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ex" "$name" "$status" "$secs" "${IMAGE:-}" \
+  # image: what the step's Jobs actually ran (RayJob-only steps fall back to $IMAGE)
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$ex" "$name" "$status" "$secs" "${img:-${IMAGE:--}}" \
     "${inst:--}" "${L7_K8S_VERSION:--}" "${st:--}" >> "$L7_RESULTS"
   result_add "L7" "${ex}/${name}" "$status" "$secs"
 }
