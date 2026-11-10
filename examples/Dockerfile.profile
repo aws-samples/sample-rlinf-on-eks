@@ -45,9 +45,12 @@ RUN test -n "${INSTALLS}" || { echo "ERROR: INSTALLS is empty"; exit 1; }; \
         { [ -n "$v" ] && [ -n "$m" ] && [ -n "$e" ]; } || { echo "ERROR: bad INSTALLS tuple '$t' (want venv:model:env[:flags])"; exit 1; }; \
         x="${x//,/ }"; \
         echo "=== install.sh embodied --venv $v --model $m --env $e $x ==="; \
-        # stdin "N": hf-libero (pi0_fast --env libero) asks "custom path for the dataset
-        # folder? (Y/N)" on its first import when ~/.libero/config.yaml does not exist yet.
-        yes N | bash requirements/install.sh ${INSTALL_MIRROR_OPTION} --platform ${RLINF_PLATFORM} \
+        # hf-libero (pi0_fast --env libero) prompts "custom path for the dataset folder? (Y/N)"
+        # on its first import if ~/.libero/config.yaml is missing, and install.sh imports it from
+        # a heredoc (no stdin): EOFError. A placeholder config skips the prompt; install.sh's
+        # reset_libero_config then rewrites it with the venv's real paths.
+        mkdir -p ~/.libero && { [ -f ~/.libero/config.yaml ] || echo "benchmark_root: /tmp" > ~/.libero/config.yaml; }; \
+        bash requirements/install.sh ${INSTALL_MIRROR_OPTION} --platform ${RLINF_PLATFORM} \
             embodied --venv "$v" --model "$m" --env "$e" $x || exit 1; \
     done
 
