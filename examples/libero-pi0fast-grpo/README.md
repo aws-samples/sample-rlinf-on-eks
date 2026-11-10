@@ -40,7 +40,17 @@ Rollouts are inference-bound (autoregressive FAST token generation, `generation_
 
 ## Architecture
 
-KubeRay `RayJob`: a Ray head and one Ray worker, one per p5en.48xlarge (`podAntiAffinity`), each requesting 8 GPUs and 16 EFA. RLinf on the head connects to the running Ray cluster and places workers on both nodes. Same pattern as the [DreamZero](../dreamzero/) SFT example.
+### Infrastructure
+
+![LIBERO-10 π₀-FAST GRPO on 2x p5en.48xlarge](diagrams/infra-libero-pi0fast-grpo.drawio.svg)
+
+KubeRay `RayJob`: a Ray head and one Ray worker, one per p5en.48xlarge (`podAntiAffinity`), each requesting 8 GPUs and 16 EFA. RLinf on the head connects to the running Ray cluster and places actor, rollout and env workers on all 16 GPUs; the actor's gradient all-reduce runs over NCCL on EFA. Both pods mount FSx for the policy, tokenizers, logs and checkpoints. Same pattern as the [DreamZero](../dreamzero/) SFT example.
+
+### Model & Algorithm
+
+![π₀-FAST token-level GRPO loop](diagrams/model-libero-pi0fast-grpo.drawio.svg)
+
+Agent and wrist camera images go through π₀-FAST's SigLIP encoder into the PaliGemma decoder, which samples a FAST action-token sequence; the detokenizer turns it into a 10-step 7-DoF action chunk for the LIBERO-10 simulator. Each trajectory's success is its reward. GRPO groups the 8 trajectories from the same initial state, drops groups whose mean reward is outside [0.1, 0.9] (nothing to learn from all-success or all-failure groups), and gives every token of a trajectory its group-relative advantage. The actor replays the sampled tokens with teacher forcing and applies PPO clipping per token, updating the LoRA weights.
 
 ## Reproduce
 
@@ -101,6 +111,11 @@ Watch `env/success_once`, `eval/success_once`, the group-success histogram, toke
 ```
 examples/libero-pi0fast-grpo/
 ├── README.md
+├── diagrams/
+│   ├── infra-libero-pi0fast-grpo.drawio   # Infrastructure (2x p5en, RayJob, EFA, FSx)
+│   ├── infra-libero-pi0fast-grpo.drawio.svg
+│   ├── model-libero-pi0fast-grpo.drawio   # Model/algorithm (token-level GRPO loop)
+│   └── model-libero-pi0fast-grpo.drawio.svg
 ├── manifests/
 │   ├── model-download.yaml        # pi0fast-libero, paligemma-3b-pt-224 (gated), tokenizer-lib-mean
 │   └── libero-pi0fast-grpo.yaml   # RayJob: 2x p5en.48xlarge, 16 GPUs, 16 EFA each

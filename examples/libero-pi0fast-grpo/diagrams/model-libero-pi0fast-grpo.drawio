@@ -1,0 +1,116 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram name="Wan World Model GRPO" id="wan-grpo">
+    <mxGraphModel dx="1571" dy="1013" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=14;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;LIBERO-10 π₀-FAST GRPO: token-level RL on an autoregressive VLA&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="600" x="400" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="policy_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="Policy (LeRobot π₀-FAST, all-linear LoRA rank 16)" vertex="1">
+          <mxGeometry height="390" width="300" x="104" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="vit" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;SigLIP vision encoder&lt;/b&gt;&lt;br&gt;agent + wrist RGB (256x256, resized to 224) → patches" vertex="1">
+          <mxGeometry height="50" width="130" x="85" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="projector" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Projector&lt;/b&gt;&lt;br&gt;vision → PaliGemma token space" vertex="1">
+          <mxGeometry height="40" width="130" x="85" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="llm" parent="policy_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;PaliGemma (Gemma 2B) decoder&lt;/b&gt;&lt;br&gt;autoregressive FAST action tokens&lt;br&gt;(sampled at temperature 0.3; greedy for eval)" vertex="1">
+          <mxGeometry height="120" width="260" x="20" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="e_vit_proj" edge="1" parent="policy_block" source="vit" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="projector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_proj_llm" edge="1" parent="policy_block" source="projector" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="wan_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="LIBERO-10 simulator (env)" vertex="1">
+          <mxGeometry height="400" width="300" x="550" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="cond" parent="wan_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;LIBERO-10 (Long) tasks&lt;/b&gt;&lt;br&gt;256 parallel envs, fixed ordered reset states&lt;br&gt;up to 520 steps per episode" vertex="1">
+          <mxGeometry height="70" width="260" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="dit" parent="wan_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;MuJoCo physics + rendering&lt;/b&gt;&lt;br&gt;executes the action chunk,&lt;br&gt;returns next agent + wrist images" vertex="1">
+          <mxGeometry height="90" width="260" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="rm" parent="wan_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Task success&lt;/b&gt;&lt;br&gt;chunk-level reward&lt;br&gt;success_once per trajectory" vertex="1">
+          <mxGeometry height="60" width="260" x="20" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="imagined" parent="wan_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Trajectory&lt;/b&gt;&lt;br&gt;(obs, sampled tokens, reward)&lt;br&gt;1,024 per update (4 rollout epochs)" vertex="1">
+          <mxGeometry height="45" width="260" x="20" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="e_cond_dit" edge="1" parent="wan_block" source="cond" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="dit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_dit_rm" edge="1" parent="wan_block" source="dit" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="rm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_rm_img" edge="1" parent="wan_block" source="rm" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="imagined">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="grpo_block" parent="1" style="swimlane;startSize=22;html=1;fontStyle=1;container=0;rounded=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="GRPO Algorithm (no critic)" vertex="1">
+          <mxGeometry height="320" width="280" x="970" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="group" parent="grpo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Group of trajectories&lt;/b&gt;&lt;br&gt;group_size = 8 from the same initial state&lt;br&gt;groups with mean reward outside [0.1, 0.9] dropped" vertex="1">
+          <mxGeometry height="60" width="240" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="adv" parent="grpo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Group-relative advantage&lt;/b&gt;&lt;br&gt;A = (r − mean(group)) / std(group)&lt;br&gt;shared by every token of the trajectory" vertex="1">
+          <mxGeometry height="60" width="240" x="20" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="clip" parent="grpo_block" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Token-level clipped surrogate&lt;/b&gt;&lt;br&gt;replay tokens with teacher forcing → log-probs&lt;br&gt;PPO clip per token (ε = 0.2), token-mean loss&lt;br&gt;updates the LoRA weights" vertex="1">
+          <mxGeometry height="90" width="240" x="20" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="e_grp_adv" edge="1" parent="grpo_block" source="group" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="adv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_adv_clip" edge="1" parent="grpo_block" source="adv" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="clip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_policy_wan" edge="1" parent="1" source="detok" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=default;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="cond" value="7-DoF&lt;br&gt;action chunk">
+          <mxGeometry relative="1" x="-0.0127" y="10" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="500" y="410" />
+              <mxPoint x="500" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_wan_policy" edge="1" parent="1" source="dit" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=default;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="vit" value="agent + wrist&lt;br&gt;RGB frames">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="450" y="240" />
+              <mxPoint x="450" y="115" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_wan_grpo" edge="1" parent="1" source="imagined" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=default;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="group" value="(obs, tokens, reward) x8">
+          <mxGeometry relative="1" x="0.087" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="910" y="420" />
+              <mxPoint x="910" y="120" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_grpo_policy" edge="1" parent="1" source="clip" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeWidth=2;labelBackgroundColor=default;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="llm" value="∇ LoRA update">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1110" y="490" />
+              <mxPoint x="140" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note_wan" parent="1" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;rounded=0;fontSize=11;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Key idea: actions are tokens&lt;/b&gt;&lt;br&gt;- π₀-FAST emits its whole action chunk as a token sequence (FAST tokenizer)&lt;br&gt;- RL treats it like a language model: sample tokens, replay them with teacher forcing&lt;br&gt;- One trajectory-level GRPO advantage per trajectory, PPO clipping per token&lt;br&gt;- Malformed sequences are not resampled: zero action + normal failure reward (on-policy)" vertex="1">
+          <mxGeometry height="110" width="1000" x="104" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="detok" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;FAST detokenizer&lt;/b&gt;&lt;br&gt;tokens → 10 x 7-DoF action chunk&lt;br&gt;(malformed sequence → zero action)" vertex="1">
+          <mxGeometry height="45" width="185" x="161.5" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="e_llm_detok" edge="1" parent="1" source="llm" style="rounded=0;html=1;strokeWidth=2;labelBackgroundColor=none;fontColor=default;sketch=1;curveFitting=1;jiggle=2;" target="detok">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
