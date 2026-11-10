@@ -115,7 +115,23 @@ kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 ./infrastructure/deploy.sh --action destroy --layer all
 ```
 
-### Build a slim image (profiles)
+## Training Examples
+
+| Example | Framework | Target | GPU Requirement | Status |
+|---------|-----------|--------|-----------------|--------|
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
+| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
+| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S); or a g7e/g6e.48xlarge | Validated (EKS 1.37, 2026-11) |
+
+All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Operator v26.7.2) from a fresh `./infrastructure/deploy.sh --action apply --layer all` in 2026-11: L0 smoke, L3 full-node NCCL on 2× p5en.48xlarge (489.8 GB/s bus bandwidth at 16 GiB over 16 EFA per node), one L5 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + π₀, the L6 multi-node step, two Wan GRPO steps (~904 s/step), and DreamZero 14B SFT on 2× p5en (20 steps, 16-shard DCP checkpoint) → `.pt` conversion → LIBERO eval smoke. The IsaacLab image passed the container test (L2) and the Isaac Sim smoke test on g7e, and its training manifest ran 2 PPO steps on a g6e.48xlarge (280 s/step).
+
+Each example README was then run exactly as written (`./validate.sh --mode cluster --skip-to 7 --level 7`, smoke edit only) from a fresh clone, on images built with the README build commands (`:latest` and each profile's `<profile>-latest`): ManiSkill (444 s/step), π₀ (428 s/step) and IsaacLab smoke on g7e.12xlarge and training on g6e.48xlarge (280 s/step); Wan (907 s/step) and DreamZero SFT → convert → eval on p5en; both showcase videos regenerated via `generate-showcase-video.sh`. Each slim profile passed L2 and the examples it serves (`dreamzero`: SFT → convert → eval; `maniskill-oft`: ManiSkill + video, Wan; `libero-pi0`: π₀ + video).
+
+---
+
+## Build a slim image (profiles)
 
 The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` target: 13 model venvs, ~48 min to build, ~18.6 GB. If you only need some of them, build a **profile** instead. A profile starts from upstream's venv-free `embodied-common-image` and installs only the venvs it lists ([`examples/profiles.env`](examples/profiles.env)). The EFA/NCCL overlay is the same as in the full image.
 
@@ -151,22 +167,6 @@ PROFILE=examples ./validate.sh --mode cluster --skip-to 1 --level 1            #
 IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
   ./validate.sh --mode cluster --skip-to 2 --level 2                          # L2 on it
 ```
-
----
-
-## Training Examples
-
-| Example | Framework | Target | GPU Requirement | Status |
-|---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
-| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
-| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
-| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S); or a g7e/g6e.48xlarge | Validated (EKS 1.37, 2026-11) |
-
-All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Operator v26.7.2) from a fresh `./infrastructure/deploy.sh --action apply --layer all` in 2026-11: L0 smoke, L3 full-node NCCL on 2× p5en.48xlarge (489.8 GB/s bus bandwidth at 16 GiB over 16 EFA per node), one L5 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + π₀, the L6 multi-node step, two Wan GRPO steps (~904 s/step), and DreamZero 14B SFT on 2× p5en (20 steps, 16-shard DCP checkpoint) → `.pt` conversion → LIBERO eval smoke. The IsaacLab image passed the container test (L2) and the Isaac Sim smoke test on g7e, and its training manifest ran 2 PPO steps on a g6e.48xlarge (280 s/step).
-
-Each example README was then run exactly as written (`./validate.sh --mode cluster --skip-to 7 --level 7`, smoke edit only) from a fresh clone, on images built with the README build commands (`:latest` and each profile's `<profile>-latest`): ManiSkill (444 s/step), π₀ (428 s/step) and IsaacLab smoke on g7e.12xlarge and training on g6e.48xlarge (280 s/step); Wan (907 s/step) and DreamZero SFT → convert → eval on p5en; both showcase videos regenerated via `generate-showcase-video.sh`. Each slim profile passed L2 and the examples it serves (`dreamzero`: SFT → convert → eval; `maniskill-oft`: ManiSkill + video, Wan; `libero-pi0`: π₀ + video).
 
 ---
 
