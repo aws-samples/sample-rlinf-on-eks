@@ -28,7 +28,7 @@ l7_run_steps() {
     l7_record "$ex" "$name" FAIL 0 ""
     return 1
   fi
-  log_info "L7 ${ex}/${name}: $(grep -cv '^\s*\(#\|$\)' "$script") commands from ${readme#"${REPO_ROOT}"/}"
+  log_info "L7 ${ex}/${name}: $(grep -cv '^\s*\(#\|$\)' "$script") commands from ${L7_README_LABEL:-${readme#"${REPO_ROOT}"/}}"
   start=$(date +%s)
   (cd "$REPO_ROOT" && bash -euo pipefail -x "$script") > "$log" 2>&1
   rc=$?
@@ -155,17 +155,18 @@ l7_isaaclab-gr00t-ppo() {
 # a save), then runs the README block with <N>=1. The regenerated asset is restored afterwards
 # (it came from a 1-step checkpoint).
 l7_video() {
-  local ex="$1" job="$2" d="${REPO_ROOT}/examples/$1" rc=0 readme
+  local ex="$1" job="$2" d="${REPO_ROOT}/examples/$1" rc=0 readme tmpd
   l7_cleanup "$job"
-  readme=$(mktemp "${TMPDIR:-/tmp}/l7-readme-XXXXXX.md")
+  tmpd=$(mktemp -d "${TMPDIR:-/tmp}/l7-readme.XXXXXX")   # BSD mktemp keeps XXXXXX literal before a suffix
+  readme="${tmpd}/README.md"
   sed 's/global_step_<N>/global_step_1/g' "$d/README.md" > "$readme"
   export SMOKE_EXTRA="runner.max_steps=1 runner.save_interval=1"
   l7_smoke
-  l7_run_steps "$ex" ckpt "$readme" "2. Launch" "3. Monitor" || rc=1
+  L7_README_LABEL="examples/$ex/README.md (global_step_<N> = 1)" l7_run_steps "$ex" ckpt "$readme" "2. Launch" "3. Monitor" || rc=1
   unset SMOKE_FILTER SMOKE_EXTRA
   l7_cleanup "$job"
-  (( rc == 0 )) && { l7_run_steps "$ex" video "$readme" "Regenerating the Showcase Video" || rc=1; }
-  rm -f "$readme"
+  (( rc == 0 )) && { L7_README_LABEL="examples/$ex/README.md (global_step_<N> = 1)" l7_run_steps "$ex" video "$readme" "Regenerating the Showcase Video" || rc=1; }
+  rm -rf "$tmpd"
   git -C "$REPO_ROOT" checkout -- "examples/$ex/assets/" 2>/dev/null || true
   return $rc
 }
