@@ -223,12 +223,13 @@ run_reference_integrity() {
     log_pass "Reference integrity -- ${checked} paths verified"
   fi
 
-  # Relative links in Markdown (READMEs, AGENTS.md, skills) point at files that exist
+  # Relative links in Markdown (READMEs, AGENTS.md, skills) point at files that exist;
+  # exported diagrams have a solid background
   local link_out
   if link_out=$(python3 "${REPO_ROOT}/tests/lib/link_check.py" "$REPO_ROOT" 2>&1); then
-    log_pass "Markdown links -- all relative links resolve"
+    log_pass "Markdown links + diagrams -- links resolve, SVG backgrounds solid"
   else
-    log_fail "Markdown links -- broken relative links:"
+    log_fail "Markdown links + diagrams -- problems:"
     while IFS= read -r m; do echo "  - $m"; done <<< "$link_out"
     fail=1
   fi
