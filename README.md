@@ -174,7 +174,7 @@ All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Ope
 rlinf-on-eks/
 ├── AGENTS.md                        # Agent system instructions: thesis, skills index
 ├── README.md                        # This file: human-facing documentation
-├── validate.sh                      # Validation harness: local checks + cluster L0-L6
+├── validate.sh                      # Validation harness: local checks + cluster L0-L7
 ├── infrastructure/                  # Layered Terraform (5 layers, orchestrated by deploy.sh)
 │   ├── README.md                    #   Layer descriptions, deploy.sh usage
 │   ├── AGENTS.md                    #   Terraform gotchas, provider quirks
@@ -283,7 +283,7 @@ Use the included validation harness to verify your deployment before launching t
 ./validate.sh --mode cluster --level 3
 ```
 
-See [Validation Levels](examples/README.md#validation) for the full L0-L6 breakdown.
+See [Validation Levels](examples/README.md#validation) for the full L0-L7 breakdown. L7 (`--skip-to 7 --level 7`) runs each example README exactly as written.
 
 ---
 

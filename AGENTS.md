@@ -27,6 +27,7 @@ Prescriptive deployment of the [RLinf](https://github.com/RLinf/RLinf) RL framew
 ./validate.sh --mode cluster --level 3          # run L0-L3
 ./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvlaoft
 ./validate.sh --mode cluster --continue-on-error
+./validate.sh --mode cluster --skip-to 7 --level 7 --example dreamzero   # L7: README as written
 
 # Infrastructure deploy (layered -- applies all 5 layers in order)
 ./infrastructure/deploy.sh --action plan --layer all
@@ -61,7 +62,7 @@ envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.
 - **`examples/`** -- RLinf training examples, Dockerfile, buildspec, and manifests. Has its own `AGENTS.md` with RLinf-specific gotchas, dependency pins, and example configs.
 - **`examples/dreamzero/`** -- DreamZero WAM example: manifests, scripts, diagrams, architecture docs, assets, and showcase README.
 - **`.opencode/skills/`** -- prescriptive skills for agent-driven deployment. Shared skills are generic (e.g., `container-image-building`). Reference-specific skills use `rlinf-` prefix (e.g., `rlinf-benchmarking`). Load via `skill` tool when the task matches.
-- **`tests/lib/`** -- `common.sh` (logging, K8s helpers), `local.sh` (offline checks), `cluster.sh` (L0-L6 live tests). Sourced by `validate.sh`.
+- **`tests/lib/`** -- `common.sh` (logging, K8s helpers), `local.sh` (offline checks), `cluster.sh` (L0-L6 live tests), `examples.sh` (L7: example READMEs as written). Sourced by `validate.sh`.
 
 ## Validation Levels (cluster mode)
 
@@ -74,6 +75,7 @@ envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.
 | L4 | Model download to FSx | 30m | Downloads models for all examples |
 | L5 | 1 training step per example | 15m each | Per-example; see `examples/AGENTS.md` |
 | L6 | Multi-node training step | 20m | Requires 2+ GPU nodes; uses StatefulSet + Ray |
+| L7 | Example READMEs, run as written | ~3h | `tests/lib/examples.sh`: README bash blocks extracted by `readme_steps.py --harness`; only the documented smoke edit (`smoke_edit.py`). Writes `results.tsv`. `--example NAME`, `L7_VIDEO=1`, `L7_STAGE=1` |
 
 ## Critical Gotchas
 

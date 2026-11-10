@@ -188,7 +188,12 @@ The repo includes a layered validation harness that tests the full stack from st
 # Cluster validation (requires live EKS cluster)
 ./validate.sh --mode cluster --level 3    # Up to NCCL/EFA
 ./validate.sh --mode cluster --level 5    # Up to training steps
-./validate.sh --mode cluster              # All levels (L0-L6)
+./validate.sh --mode cluster              # L0-L6 (L7 runs only when asked)
+
+# L7: run every example README as written (the documented smoke edit only); results.tsv
+# records image, instance type, Kubernetes version and step time per step
+./validate.sh --mode cluster --skip-to 7 --level 7
+L7_VIDEO=1 ./validate.sh --mode cluster --skip-to 7 --level 7 --example maniskill-openvlaoft-ppo
 
 # Advanced
 ./validate.sh --mode cluster --skip-to 2  # Resume from L2
@@ -201,12 +206,13 @@ The repo includes a layered validation harness that tests the full stack from st
 | Level | Name | What it Tests | Approx Time |
 |-------|------|---------------|-------------|
 | L0 | Infrastructure | GPU, EFA devices, FSx mount | ~1 min |
-| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~45-50 min (measured 43–45 min on main@c70606f0; 48.6 min with EFA 1.50.0 + nccl-tests; build_timeout 90 min) |
+| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~45-50 min (measured 43–45 min on main@c70606f0; 48.6 min with EFA 1.50.0 + nccl-tests; build_timeout 150 min; `isaaclab-gr00t` ~100 min incl. push) |
 | L2 | Container Test | 12 tests: CUDA, EFA libs, venvs, torch version, comms stack versions, Ray, MPI (Message Passing Interface) | ~2 min |
 | L3 | NCCL/EFA | allreduce bandwidth threshold via MPIJob (p5en: full-node, >= 391 GB/s busbw at 16 GiB) | ~3-4 min |
 | L4 | Model Download | HuggingFace model weights to FSx | ~30 min |
 | L5 | Training Steps | 1 PPO step per example (x3) | ~30 min |
 | L6 | Multi-Node | 2-node Ray cluster, 1 training step | ~10 min |
+| L7 | Example READMEs | Each example's README steps run as written (`tests/lib/examples.sh`): ManiSkill, π₀, IsaacLab smoke + train on g-class; Wan, DreamZero SFT → convert → eval on p5en. Optional: showcase videos (`L7_VIDEO=1`), DreamZero staging (`L7_STAGE=1`) | ~3 h total; run examples in parallel with `--example` |
 
 ### Training Step Test (L5)
 
