@@ -10,7 +10,7 @@
         <mxCell id="sys" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=#FFFFFF;labelBackgroundColor=none;html=1;whiteSpace=wrap;rounded=0;sketch=1;curveFitting=1;jiggle=2;" value="System node group (m5.2xlarge)" vertex="1">
           <mxGeometry height="84" width="860" x="60" y="76" as="geometry" />
         </mxCell>
-        <mxCell id="karp" parent="1" style="rounded=0;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Karpenter&lt;/b&gt;&lt;br&gt;gpu-sim NodePool: g7e.24/48xlarge, g6e.24/48xlarge" vertex="1">
+        <mxCell id="karp" parent="1" style="rounded=0;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Karpenter&lt;/b&gt;&lt;br&gt;gpu-sim NodePool: g7e.12/24/48xlarge, g6e.24/48xlarge" vertex="1">
           <mxGeometry height="46" width="270" x="72" y="106" as="geometry" />
         </mxCell>
         <mxCell id="gpuop" parent="1" style="rounded=0;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;NVIDIA GPU Operator&lt;/b&gt;&lt;br&gt;device plugin + dcgm-exporter 4.x" vertex="1">

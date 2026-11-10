@@ -50,21 +50,21 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="note" parent="1" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;rounded=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;&lt;b&gt;RLinf PPO Training (Single-Node)&lt;/b&gt;&lt;br&gt;- VLA policy (7B) with FSDP across 8 H200 GPUs&lt;br&gt;- GPU-accelerated simulator (ManiSkill3 or LIBERO)&lt;br&gt;- All RL components colocated in one K8s Job&lt;br&gt;- ManiSkill: split (actor 0-7, env 0-3, rollout 4-7)&lt;br&gt;- LIBERO/pi0: combined (all roles on all GPUs)&lt;br&gt;- Checkpoint + model weights on FSx for Lustre&lt;/font&gt;" vertex="1">
+        <mxCell id="note" parent="1" style="text;html=1;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;rounded=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;font style=&quot;font-size: 11px;&quot;&gt;&lt;b&gt;RLinf RL Training (Single-Node)&lt;/b&gt;&lt;br&gt;- VLA policy (7B), FSDP across the node GPUs&lt;br&gt;- GPU-accelerated simulator (ManiSkill3 or LIBERO)&lt;br&gt;- All RL components colocated in one K8s Job&lt;br&gt;- ManiSkill / pi0 (default): gpu-sim pool, 2 GPUs&lt;br&gt;- Wan GRPO: gpu-training pool (p5en), 8 GPUs&lt;br&gt;- Checkpoint + model weights on FSx for Lustre&lt;/font&gt;" vertex="1">
           <mxGeometry height="110" width="280" x="115" y="520" as="geometry" />
         </mxCell>
-        <mxCell id="gpu1" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="GPU Node (p5en.48xlarge)" vertex="1">
+        <mxCell id="gpu1" parent="1" style="swimlane;startSize=24;html=1;fontStyle=1;container=0;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="GPU Node: g7e.12xlarge (gpu-sim, default) or p5en.48xlarge (gpu-training)" vertex="1">
           <mxGeometry height="310" width="760" x="145" y="70" as="geometry" />
         </mxCell>
-        <mxCell id="gpu1hw" parent="gpu1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fontSize=11;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;&lt;b&gt;8x H200 141GB&lt;/b&gt;&lt;br&gt;NVSwitch (intra-node)&lt;/font&gt;" vertex="1">
-          <mxGeometry height="38" width="130" x="5" y="30" as="geometry" />
+        <mxCell id="gpu1hw" parent="gpu1" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=none;fontSize=11;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;&lt;b&gt;2x RTX PRO 6000&lt;/b&gt; / &lt;b&gt;8x H200&lt;/b&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="38" width="300" x="5" y="30" as="geometry" />
         </mxCell>
         <mxCell id="e_karp" edge="1" parent="1" source="karpenter" style="rounded=1;html=1;dashed=1;labelBackgroundColor=none;fontColor=default;entryX=0.598;entryY=-0.003;entryDx=0;entryDy=0;entryPerimeter=0;sketch=1;curveFitting=1;jiggle=2;" target="gpu1" value="&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212));&quot;&gt;provisions&lt;/span&gt;">
           <mxGeometry relative="1" as="geometry">
             <mxPoint x="536" y="59" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="actor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Actor (Policy)&lt;/b&gt;&lt;br&gt;VLA Model (7B)&lt;br&gt;FSDP across 8 GPUs&lt;br&gt;Forward + backward pass" vertex="1">
+        <mxCell id="actor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Actor (Policy)&lt;/b&gt;&lt;br&gt;VLA Model (7B)&lt;br&gt;FSDP across node GPUs&lt;br&gt;Forward + backward pass" vertex="1">
           <mxGeometry height="130" width="150" x="200" y="182" as="geometry" />
         </mxCell>
         <mxCell id="rollout" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fontSize=10;labelBackgroundColor=none;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Rollout (Inference)&lt;/b&gt;&lt;br&gt;VLA Model copy&lt;br&gt;Collects trajectories&lt;br&gt;from simulator" vertex="1">

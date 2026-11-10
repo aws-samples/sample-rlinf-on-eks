@@ -223,6 +223,16 @@ run_reference_integrity() {
     log_pass "Reference integrity -- ${checked} paths verified"
   fi
 
+  # Instance types in README Hardware rows + diagrams match what the manifests schedule on
+  local it_out
+  if it_out=$(python3 "${REPO_ROOT}/tests/lib/instance_types_check.py" "$REPO_ROOT" 2>&1); then
+    log_pass "Instance types -- READMEs and diagrams match the manifests"
+  else
+    log_fail "Instance types -- docs/diagrams disagree with the manifests:"
+    while IFS= read -r m; do echo "  - $m"; done <<< "$it_out"
+    fail=1
+  fi
+
   return $fail
 }
 
