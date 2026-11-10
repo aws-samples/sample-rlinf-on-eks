@@ -56,13 +56,13 @@ For initial development and iteration:
 # Upload source and trigger build
 zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
-aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."rlinf"')
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 ```
 
 **Alternative: Local build**:
 
 ```bash
-export ECR_URI=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"')  # Replace with your reference name
+export ECR_URI=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url)
 aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_URI
 git clone https://github.com/RLinf/RLinf.git RLinf
 docker build -t $ECR_URI:latest -f examples/Dockerfile .
@@ -73,7 +73,7 @@ docker push $ECR_URI:latest
 
 ```bash
 # Set the image reference (<ecr repo>:<tag>) and deploy with envsubst
-export IMAGE=$(terraform -chdir=infrastructure/build output -json ecr_repository_urls | jq -r '."rlinf"'):latest  # or :<profile>-latest
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest  # or :<profile>-latest
 envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 
 # Monitor
@@ -140,7 +140,7 @@ phases:
 # Upload source (only files needed by CodeBuild: Dockerfile, buildspec, scripts)
 zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
 aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
-aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."rlinf"')
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 ```
 
 ### CodeBuild Operational Notes

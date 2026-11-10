@@ -326,7 +326,7 @@ Trigger a build:
 # Use zip -r (not git archive -- git archive misses uncommitted files)
 zip -r <cluster-name>.zip . -x ".git/*" -x "infrastructure/*/.terraform/*"
 aws s3 cp <cluster-name>.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/<cluster-name>.zip
-aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."<reference-name>"')
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 ```
 
 ### CodeBuild Operational Notes

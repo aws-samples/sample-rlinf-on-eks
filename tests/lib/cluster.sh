@@ -46,18 +46,18 @@ detect_cluster_config() {
 
   log_info "Detecting cluster configuration from terraform outputs..."
 
-  local tf_dir="${_TF_DIR}"
-  if [[ ! -d "${tf_dir}/.terraform" ]]; then
-    log_warn "Terraform not initialized. Set ECR_URI, CODEBUILD_PROJECT manually."
+  # ECR + CodeBuild are build-layer outputs; the region is a cluster-layer output.
+  local tf_dir="${_TF_DIR}" build_dir="${INFRA_DIR:-${REPO_ROOT}/infrastructure}/build"
+  if [[ ! -d "${build_dir}/.terraform" ]]; then
+    log_warn "Terraform not initialized in ${build_dir}. Set ECR_URI, CODEBUILD_PROJECT, CODEBUILD_BUCKET manually."
     return 0
   fi
 
-  ECR_URI=$(terraform -chdir="$tf_dir" output -json ecr_repository_urls 2>/dev/null | \
-    python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('rlinf',''))" 2>/dev/null) || true
-  CODEBUILD_PROJECT=$(terraform -chdir="$tf_dir" output -json codebuild_project_names 2>/dev/null | \
-    python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('rlinf',''))" 2>/dev/null) || true
-  CODEBUILD_BUCKET=$(terraform -chdir="$tf_dir" output -raw codebuild_source_bucket 2>/dev/null) || true
-  REGION=$(terraform -chdir="$tf_dir" output -raw target_az 2>/dev/null | sed 's/[a-z]$//' || echo "us-east-2")
+  ECR_URI=$(terraform -chdir="$build_dir" output -raw ecr_repository_url 2>/dev/null) || ECR_URI=""
+  CODEBUILD_PROJECT="${CODEBUILD_PROJECT:-$(terraform -chdir="$build_dir" output -raw codebuild_project_name 2>/dev/null || true)}"
+  CODEBUILD_BUCKET="${CODEBUILD_BUCKET:-$(terraform -chdir="$build_dir" output -raw codebuild_source_bucket 2>/dev/null || true)}"
+  REGION="${REGION:-$(terraform -chdir="$tf_dir" output -raw region 2>/dev/null || true)}"
+  REGION="${REGION:-${AWS_REGION:-us-east-2}}"
 
   export ECR_URI CODEBUILD_PROJECT CODEBUILD_BUCKET REGION
 
