@@ -20,7 +20,7 @@ l7_run_steps() {
   local ex="$1" name="$2" readme="$3"; shift 3
   local script log rc start from=()
   if [[ "${1:-}" == --from ]]; then from=(--from "$2"); shift 2; fi
-  script=$(mktemp "${TMPDIR:-/tmp}/l7-${ex}-XXXXXX.sh")
+  script=$(mktemp "${TMPDIR:-/tmp}/l7-${ex}-${name}.XXXXXX")
   log="${L7_LOG_DIR}/${ex}-${name}.log"
   python3 "${REPO_ROOT}/tests/lib/readme_steps.py" --harness ${from[@]+"${from[@]}"} "$readme" "$@" > "$script"
   if [[ ! -s "$script" ]] || ! grep -qv '^# ---' "$script"; then
