@@ -1,6 +1,6 @@
 # IsaacLab Franka Stack-Cube + GR00T N1.5 PPO on Amazon EKS
 
-> **Validated on one RT-core node (2026-11):** 5 PPO steps + eval on g7e.24xlarge, g6e.24xlarge and g5.12xlarge; eval `success_once` reproduces the SFT baseline. **Recommended: g7e.24xlarge (4× RTX PRO 6000), ~128 s per PPO step, ~$0.59 per step on-demand.** See [Results](#results).
+> **Validated on one RT-core node (2026-11):** 5 PPO steps + eval on g7e.24xlarge, g6e.24xlarge and g5.12xlarge (EKS 1.35); eval `success_once` reproduces the SFT baseline. On **EKS 1.37** the README steps pass as written: Isaac Sim smoke, and 2 PPO steps of the committed manifest on a g6e.48xlarge (4 of 8 L40S, 280 s/step). **Recommended: g7e.24xlarge (4× RTX PRO 6000), ~128 s per PPO step, ~$0.59 per step on-demand.** See [Results](#results).
 
 This example runs RLinf's validated recipe for **Isaac Lab** with **NVIDIA GR00T N1.5**: PPO fine-tuning of an SFT policy on the Franka stack-cube task. Upstream reports `success_once` going from **0.654 after SFT to 0.897 after RL** ([RLinf IsaacLab docs](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/isaaclab.html)).
 
@@ -105,7 +105,7 @@ The recipe follows the usual path: SFT on demonstrations, then RL in simulation.
 
 ## Results
 
-PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on GPUs 0-3), 2-step runs unless noted. Step times from RLinf's per-step timers; GPU core use (`SM_ACTIVE`, fraction of cycles an SM has work) from DCGM. Measured 2026-10/11; on-demand prices in us-east-2 (g5 in ap-southeast-3).
+PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on GPUs 0-3), 2-step runs unless noted. Step times from RLinf's per-step timers; GPU core use (`SM_ACTIVE`, fraction of cycles an SM has work) from DCGM. Measured 2026-10/11 on EKS 1.35; on-demand prices in us-east-2 (g5 in ap-southeast-3). The image and manifests are unchanged on EKS 1.37 (below).
 
 | Instance | GPUs | Batch | Step (s) | Training (s) | Rollouts (s) | Training SM_ACTIVE | $/hr | $/step |
 |---|---|---|---|---|---|---|---|---|
@@ -120,6 +120,8 @@ PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on
 | eval `success_once` | 0.635 | 0.521 | 0.646 | 0.654 |
 
 Five steps cannot show RL improvement; these runs validate the pipeline. The 95% interval for 96 trajectories is about ±0.10, so all four agree with the SFT baseline. Upstream reaches 0.897 after a long RL run.
+
+**EKS 1.37** (Karpenter 1.15.1, GPU Operator v26.7.2, us-west-2, 2026-11; image `isaaclab-gr00t-20261109-235402`): README steps 2–4 run as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example isaaclab-gr00t-ppo`, smoke edit `runner.max_steps=2`). Isaac Sim smoke PASS on g7e.12xlarge (`render_ok`); PPO 2 steps PASS on **g6e.48xlarge** (the pod uses 4 of 8 L40S; FSx in another AZ): 273 / 280 s per step, train `success_once` 0.55 / 0.67. g6e.24xlarge measured 253 s on EKS 1.35 with FSx in the same AZ.
 
 What the measurements show:
 - **Use 4 GPUs.** On L40S, 4 GPUs were faster than 8 at batch 64 (training 151 vs 166 s); with batch 32 they were equal. Only the ~550M-parameter action head trains, so spreading the actor over 8 PCIe GPUs only adds communication.
