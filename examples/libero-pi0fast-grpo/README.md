@@ -5,7 +5,7 @@
 
 Multi-node RL fine-tuning of [LeRobot π₀-FAST](https://huggingface.co/lerobot/pi0fast-libero) on **LIBERO-10 (Long)** with **token-level GRPO**, using RLinf's two-node, 16-GPU reference configuration ([upstream docs](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/pi0_fast.html)). Upstream reports `success_once` around 96% after 330 steps (one seed; base policy 85.8%).
 
-> **Status:** VALIDATION_STATUS
+> **Validated on EKS 1.37 (2026-11):** 2x p5en.48xlarge, README steps 2–4 as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example libero-pi0fast-grpo`, image `pi0-fast-20261110-072911`). One GRPO step takes **~50 min** at the reference config (1,024 trajectories): rollouts 2,500 s (4 epochs × ~620 s), actor update 472 s. Step 1: train `success_once` 0.876, replay log-probabilities finite (fraction 1.000), ratio 0.971, `approx_kl` 0.0037. Step 2 (3,063 s incl. the final eval): train `success_once` 0.865, ratio 1.003; **eval `success_once` 0.852** over 256 fixed episodes (upstream base policy: 85.8% over 500), RayJob `SUCCEEDED` in 1 h 54 min.
 
 ## Overview
 
@@ -23,6 +23,20 @@ Multi-node RL fine-tuning of [LeRobot π₀-FAST](https://huggingface.co/lerobot
 π₀-FAST generates its whole action chunk as a token sequence (FAST action tokenizer, `jadechoghari/tokenizer-lib-mean`), so RL treats it like a language model: rollouts sample tokens at temperature 0.3, and the actor replays them with teacher forcing to get per-token log-probabilities. Every token of a trajectory shares the trajectory's GRPO advantage (its success relative to the other 7 trajectories from the same initial state), with PPO clipping per token. Malformed token sequences are not resampled: they execute a zero action and keep their (failing) reward, which keeps sampling on-policy.
 
 All RL components (LIBERO env workers, rollout, actor) are colocated on all 16 GPUs (`actor,env,rollout: all`). The actor is FSDP `NO_SHARD` with FP32 master weights: data parallel over 16 GPUs, gradients all-reduced over NCCL on EFA between the two nodes.
+
+## Cost and duration
+
+At ~50 min per step, upstream's 330-step schedule is ~11.5 days on 2x p5en.48xlarge. A Capacity Block for ML is the practical way to hold the pair for that long. For pipeline checks use the smoke edit: 2 steps plus the final eval, 1 h 54 min end to end including ~10 min startup.
+
+| Phase (step 1) | Seconds |
+|---|---|
+| Rollouts (`generate_rollouts`, 4 epochs × 256 envs × 520 steps) | 2,501 |
+| of which policy inference (`rollout/predict`) | 2,221 |
+| Actor update (`actor_training`) | 472 |
+| Weight sync actor → rollout | 14 |
+| **Step** | **2,986** |
+
+Rollouts are inference-bound (autoregressive FAST token generation, `generation_backend: huggingface`).
 
 ## Architecture
 
