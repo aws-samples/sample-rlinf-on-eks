@@ -17,6 +17,12 @@
 
 data "aws_availability_zones" "available" {
   state = "available"
+  # Regular AZs only: opted-in Local/Wavelength Zones (e.g. us-west-2-lax-1a) sort
+  # before them and would otherwise become VPC/EKS subnets.
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 data "aws_caller_identity" "current" {}
@@ -27,13 +33,21 @@ locals {
   # Use the explicitly set target_az or default to the first AZ.
   effective_az = var.target_az != "" ? var.target_az : data.aws_availability_zones.available.names[0]
 
-  # VPC AZs: always include the target AZ plus one additional for HA (NAT, ALB).
-  # If target_az is already in the first 2 AZs, this is a no-op.
-  default_azs = slice(data.aws_availability_zones.available.names, 0, 2)
-  vpc_azs = contains(local.default_azs, local.effective_az) ? local.default_azs : [
-    local.effective_az,
-    [for az in data.aws_availability_zones.available.names : az if az != local.effective_az][0]
-  ]
+  # VPC AZs: subnets in the region's first 3 AZs, in region order. Subnets are indexed
+  # by position, so the order must not depend on target_az (reordering would replace
+  # them) - with one exception: in regions with 4+ AZs, a target_az past the first 3
+  # (e.g. us-west-2d, where a Capacity Block may land) replaces the third subnet, so the
+  # target AZ always has one. Changing target_az between two of the first 3 AZs only
+  # needs a new target_az (and an FSx re-create), not a VPC/EKS rebuild; moving it to or
+  # from an AZ past the first 3 replaces the third subnet.
+  # Workload resources (system nodes, FSx, GPU NodePools) stay pinned to target_az.
+  vpc_azs_first = slice(
+    data.aws_availability_zones.available.names,
+    0, min(3, length(data.aws_availability_zones.available.names))
+  )
+  vpc_azs = contains(local.vpc_azs_first, local.effective_az) ? local.vpc_azs_first : concat(
+    slice(local.vpc_azs_first, 0, length(local.vpc_azs_first) - 1), [local.effective_az]
+  )
 
   # Single subnet for all workload resources in the target AZ
   target_subnet_ids = [
@@ -53,9 +67,10 @@ module "vpc" {
   name = "${var.cluster_name}-vpc"
   cidr = "10.0.0.0/16"
 
-  azs             = local.vpc_azs
-  private_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
-  public_subnets  = ["10.0.101.0/24", "10.0.102.0/24"]
+  azs = local.vpc_azs
+  # /20 private subnets (4,091 IPs each: VPC CNI gives every pod a VPC IP) and /24 public.
+  private_subnets = [for i, _ in local.vpc_azs : cidrsubnet("10.0.0.0/16", 4, i)]
+  public_subnets  = [for i, _ in local.vpc_azs : cidrsubnet("10.0.0.0/16", 8, 240 + i)]
 
   enable_nat_gateway   = true
   single_nat_gateway   = true

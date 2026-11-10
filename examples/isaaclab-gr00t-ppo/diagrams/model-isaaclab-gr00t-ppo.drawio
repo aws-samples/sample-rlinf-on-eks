@@ -1,0 +1,108 @@
+<mxfile host="Electron" agent="RLinf-on-EKS">
+  <diagram id="isaaclab-gr00t-model" name="GR00T N1.5 PPO">
+    <mxGraphModel dx="1920" dy="813" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="960" pageHeight="440" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;align=center;fontSize=15;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;IsaacLab Franka stack-cube + GR00T N1.5 PPO&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="880" x="-100" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="sim" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=none;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="Simulator (Isaac Sim 5.1 + Isaac Lab 2.3)" vertex="1">
+          <mxGeometry height="390" width="260" x="40" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="envs" parent="sim" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;64 parallel envs&lt;/b&gt; (train)&lt;br&gt;32 (eval); 448-step episodes" vertex="1">
+          <mxGeometry height="70" width="228" x="16" y="304" as="geometry" />
+        </mxCell>
+        <mxCell id="rew" parent="sim" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Reward / success&lt;/b&gt;&lt;br&gt;sparse task reward; success_once" vertex="1">
+          <mxGeometry height="70" width="228" x="16" y="199" as="geometry" />
+        </mxCell>
+        <mxCell id="task" parent="sim" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Isaac-Stack-Cube-Franka-IK-Rel-Visuomotor-Rewarded-v0&lt;/b&gt;&lt;br&gt;stack three cubes; IK relative control" vertex="1">
+          <mxGeometry height="70" width="228" x="16" y="107" as="geometry" />
+        </mxCell>
+        <mxCell id="cams" parent="1" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;RTX cameras&lt;/b&gt;&lt;br&gt;table cam + wrist cam, 256×256" vertex="1">
+          <mxGeometry height="50" width="228" x="56" y="166" as="geometry" />
+        </mxCell>
+        <mxCell id="pol" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=none;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="Policy: GR00T N1.5 (~3B)" vertex="1">
+          <mxGeometry height="390" width="300" x="354" y="132" as="geometry" />
+        </mxCell>
+        <mxCell id="lm" parent="pol" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Qwen3 language model&lt;/b&gt;&lt;br&gt;(Eagle 2.5 VLM) — frozen" vertex="1">
+          <mxGeometry height="50" width="268" x="16" y="117" as="geometry" />
+        </mxCell>
+        <mxCell id="dit" parent="pol" style="rounded=1;fillColor=none;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Action head: DiT (~550M)&lt;/b&gt;&lt;br&gt;flow-matching action chunks&lt;br&gt;&lt;b&gt;trained by PPO&lt;/b&gt;" vertex="1">
+          <mxGeometry height="70" width="268" x="16" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="m4" edge="1" parent="pol" source="lm" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="dit" value="features">
+          <mxGeometry relative="1" x="-0.2121" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="act" parent="pol" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Action chunk&lt;/b&gt;&lt;br&gt;end-effector deltas + gripper" vertex="1">
+          <mxGeometry height="70" width="268" x="16" y="303" as="geometry" />
+        </mxCell>
+        <mxCell id="m5" edge="1" parent="pol" source="dit" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="act" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="vit" parent="1" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;SigLIP vision encoder&lt;/b&gt;&lt;br&gt;(Eagle 2.5 VLM) — frozen" vertex="1">
+          <mxGeometry height="50" width="268" x="370" y="166" as="geometry" />
+        </mxCell>
+        <mxCell id="ppo" parent="1" style="swimlane;startSize=24;fontStyle=1;container=0;fillColor=none;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="PPO (RLinf)" vertex="1">
+          <mxGeometry height="140" width="830" x="-70" y="549" as="geometry" />
+        </mxCell>
+        <mxCell id="sync" parent="ppo" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Weight sync&lt;/b&gt;&lt;br&gt;actor → rollout workers" vertex="1">
+          <mxGeometry height="60" width="150" x="660" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="upd" parent="ppo" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Clipped PPO update&lt;/b&gt;&lt;br&gt;FSDP over 4 GPUs&lt;br&gt;global batch 512, micro_batch 64" vertex="1">
+          <mxGeometry height="60" width="198" x="420" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="m9" edge="1" parent="ppo" source="upd" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="sync" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="gae" parent="ppo" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Value head + GAE&lt;/b&gt;&lt;br&gt;advantages and returns" vertex="1">
+          <mxGeometry height="60" width="164" x="214" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="m8" edge="1" parent="ppo" source="gae" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="upd" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="buf" parent="ppo" style="rounded=1;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="&lt;b&gt;Rollout trajectories&lt;/b&gt;&lt;br&gt;obs, actions, log-probs, rewards" vertex="1">
+          <mxGeometry height="60" width="150" x="22" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="m7" edge="1" parent="ppo" source="buf" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="gae" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" edge="1" parent="1" source="cams" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="vit" value="images">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m2" edge="1" parent="1" source="act" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;edgeStyle=orthogonalEdgeStyle;sketch=1;curveFitting=1;jiggle=2;" target="envs" value="actions">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="310" y="470" />
+              <mxPoint x="310" y="470" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m3" edge="1" parent="1" source="vit" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="lm" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="m6" edge="1" parent="1" source="rew" style="endArrow=classic;html=1;edgeStyle=orthogonalEdgeStyle;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;fontSize=10;labelBackgroundColor=#FFFFFF;sketch=1;curveFitting=1;jiggle=2;" target="buf" value="rewards">
+          <mxGeometry relative="1" x="0.0732" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="-10.53" y="365" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10" edge="1" parent="1" source="sync" style="endArrow=classic;html=1;fontSize=10;labelBackgroundColor=#FFFFFF;edgeStyle=orthogonalEdgeStyle;sketch=1;curveFitting=1;jiggle=2;" target="dit" value="new weights">
+          <mxGeometry relative="1" x="-0.0195" as="geometry">
+            <mxPoint y="1" as="offset" />
+            <Array as="points">
+              <mxPoint x="700" y="367" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" parent="1" style="text;align=center;fontSize=11;fontStyle=2;labelBackgroundColor=none;html=1;whiteSpace=wrap;sketch=1;curveFitting=1;jiggle=2;" value="Start: RLinf/RLinf-Gr00t-SFT-Stack-cube (SFT on human demos, success_once ≈ 0.65). Upstream PPO reaches ≈ 0.90." vertex="1">
+          <mxGeometry height="30" width="640" x="30" y="700" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

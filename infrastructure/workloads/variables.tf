@@ -47,6 +47,18 @@ variable "target_az" {
   default     = ""
 }
 
+variable "fsx_az" {
+  description = "AZ of the FSx filesystem (storage output fsx_az, passed by deploy.sh). The GPU NodePools are pinned here; empty = target_az."
+  type        = string
+  default     = ""
+}
+
+variable "gpu_any_az" {
+  description = "Let the GPU NodePools launch in any VPC AZ instead of fsx_az. Use only to find capacity before moving FSx to that AZ (TF_VAR_fsx_az); GPU nodes outside fsx_az read FSx cross-AZ."
+  type        = bool
+  default     = false
+}
+
 variable "capacity_type" {
   description = "Capacity types Karpenter can use: on-demand, spot, reserved. Use reserved for Capacity Blocks (requires capacity_reservation_selector)."
   type        = list(string)
@@ -77,4 +89,40 @@ variable "enable_resource_limits" {
   description = "Enable ResourceQuota and LimitRange for the training namespace"
   type        = bool
   default     = true
+}
+
+# -------------------------------------------------------------------
+# Optional RT-core simulation pool (gpu-sim): Isaac Sim / IsaacLab etc.
+# -------------------------------------------------------------------
+variable "enable_sim_pool" {
+  description = "Create the gpu-sim NodePool/EC2NodeClass for RT-core simulator GPUs (e.g. Isaac Sim 5.1, which does not support A100/H100/H200)"
+  type        = bool
+  default     = false
+}
+
+variable "sim_instance_types" {
+  description = "Instance types for the gpu-sim pool (RT-core GPUs). g7e (RTX PRO 6000) is recommended, g6e (L40S) the fallback; add g5 where neither is offered. Several sizes widen the net for scarce on-demand capacity."
+  type        = list(string)
+  default     = ["g7e.12xlarge", "g7e.24xlarge", "g7e.48xlarge", "g6e.24xlarge", "g6e.48xlarge"]
+}
+
+variable "sim_capacity_type" {
+  description = "Capacity types for the gpu-sim pool. On-demand is safer: losing one node kills the whole Ray job."
+  type        = list(string)
+  default     = ["on-demand"]
+}
+
+variable "sim_capacity_reservation_selector" {
+  description = "Capacity reservation selector for the gpu-sim EC2NodeClass (ODCRs for g-class sims). Set together with sim_capacity_type = [\"reserved\", \"on-demand\"]. Same shape as capacity_reservation_selector."
+  type = list(object({
+    id   = optional(string)
+    tags = optional(map(string))
+  }))
+  default = []
+}
+
+variable "sim_gpu_limit" {
+  description = "Maximum total GPUs Karpenter can provision in the gpu-sim pool (cost guard)"
+  type        = number
+  default     = 16
 }

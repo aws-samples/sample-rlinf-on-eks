@@ -31,7 +31,7 @@ Papers: [RLinf System](https://arxiv.org/abs/2509.15965), [RLinf-VLA](https://ar
 
 ![RLinf PPO Infrastructure](examples/diagrams/infra-rlinf-ppo.drawio.svg)
 
-Karpenter provisions a single p5en.48xlarge GPU node on-demand when the training Job is submitted. The pod pulls its container image from ECR (built via CodeBuild's two-stage process) and mounts FSx for Lustre to access pre-trained model weights and write checkpoints. All RL components — actor, rollout, environment, and PPO trainer — run colocated inside a single pod with 8 H200 GPUs allocated via the GPU Operator's device plugin. The actor model occupies GPUs 0-7, rollout inference runs on GPUs 4-7, and the GPU-accelerated ManiSkill3 simulator shares GPUs 0-3 with environment workers. This split maximizes throughput by overlapping simulation rendering with rollout inference on separate GPU subsets. For LIBERO (CPU-based MuJoCo rendering), all components share GPUs 0-7 in a combined placement instead.
+Karpenter provisions a single GPU node on-demand when the training Job is submitted: a g7e.12xlarge (2x RTX PRO 6000) by default for ManiSkill and LIBERO + pi0, or a p5en.48xlarge (8x H200) for the large-GPU settings and Wan. The pod pulls its container image from ECR (built via CodeBuild's two-stage process) and mounts FSx for Lustre to access pre-trained model weights and write checkpoints. All RL components — actor, rollout, environment, and PPO trainer — run colocated inside a single pod, with GPUs allocated via the GPU Operator's device plugin. On the default g7e.12xlarge (2 GPUs), ManiSkill uses a split placement: the actor on GPUs 0-1, the GPU-accelerated ManiSkill3 environment workers on GPU 0 and rollout inference on GPU 1, so simulation and inference overlap on separate GPUs. LIBERO + π₀ (CPU-based MuJoCo rendering) puts all components on GPUs 0-1 (combined placement). On a p5en.48xlarge (8x H200) the same placements scale to the upstream configs: ManiSkill actor 0-7, environment 0-3, rollout 4-7; LIBERO all components on 0-7. Wan uses 8 GPUs on a p5en.48xlarge.
 
 ### Multi-Node SFT (Supervised Fine-Tuning) (DreamZero)
 
@@ -54,7 +54,7 @@ Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Polic
 - [Terraform state bucket](#terraform-state-backend) created
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.5.0
 - [AWS CLI (Command Line Interface) v2](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html) configured
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) >= 1.35
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) >= 1.36
 
 > See [Prerequisites and Setup](#prerequisites-and-setup) for full software versions and setup instructions.
 
@@ -64,23 +64,16 @@ Deploy the [RLinf](https://github.com/RLinf/RLinf) ManiSkill PPO (Proximal Polic
 # 1. Clone and configure
 git clone https://github.com/aws-samples/sample-rlinf-on-eks.git && cd sample-rlinf-on-eks
 
-# Configure GPU instance type and Availability Zone.
-# Set these to match your Capacity Block reservation (see "GPU Capacity" below).
+# Configure the Region and Availability Zone.
 cat > infrastructure/cluster/terraform.tfvars <<EOF
 region    = "us-east-1"
-target_az = "us-east-1b"  # AZ of your Capacity Block reservation
+target_az = "us-east-1b"  # an AZ that offers g7e (or your reservation's AZ)
 EOF
 
+# ManiSkill (and LIBERO + pi0) run on one g7e.12xlarge (2x RTX PRO 6000) in the gpu-sim pool.
+# DreamZero and Wan need p-class nodes in the gpu-training pool: see "GPU Capacity" below.
 cat > infrastructure/workloads/terraform.tfvars <<EOF
-gpu_instance_types = ["p5.48xlarge"]  # Your reserved instance type
-capacity_type      = ["reserved", "on-demand"]  # reserved = Capacity Block; on-demand = fallback
-gpu_limit          = 64                         # 8 GPUs × max nodes
-
-# Capacity Block reservation selector (required for reserved capacity type)
-# Find your reservation ID in the EC2 console under Capacity Reservations.
-capacity_reservation_selector = [
-  { id = "cr-0123456789abcdef0" }  # Replace with your Capacity Block reservation ID
-]
+enable_sim_pool = true
 EOF
 
 # 2. Provision infrastructure (~20 min)
@@ -100,13 +93,16 @@ export NAMESPACE=rlinf
 envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
 kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 
-# 5. Validate container
+# 5. Validate container (on the gpu-sim pool, where ManiSkill runs; container-test.yaml
+#    is the same test for the gpu-training pool with EFA)
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
-kubectl logs -f job/container-test -n rlinf
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test-sim.yaml | kubectl apply -f -
+kubectl wait --for=condition=complete job/container-test -n rlinf --timeout=20m
+kubectl logs job/container-test -n rlinf | tail -3    # expect: CONTAINER TEST PASSED
+kubectl delete job container-test -n rlinf
 
 # 6. Launch training
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
 kubectl logs -f job/rlinf-maniskill-openvlaoft -n rlinf
 ```
 ### Teardown
@@ -119,7 +115,23 @@ kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 ./infrastructure/deploy.sh --action destroy --layer all
 ```
 
-### Build a slim image (profiles)
+## Training Examples
+
+| Example | Framework | Target | GPU Requirement | Status |
+|---------|-----------|--------|-----------------|--------|
+| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
+| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
+| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
+| [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S); or a g7e/g6e.48xlarge | Validated (EKS 1.37, 2026-11) |
+
+All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Operator v26.7.2) from a fresh `./infrastructure/deploy.sh --action apply --layer all` in 2026-11: L0 smoke, L3 full-node NCCL on 2× p5en.48xlarge (489.8 GB/s bus bandwidth at 16 GiB over 16 EFA per node), one L5 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + π₀, the L6 multi-node step, two Wan GRPO steps (~904 s/step), and DreamZero 14B SFT on 2× p5en (20 steps, 16-shard DCP checkpoint) → `.pt` conversion → LIBERO eval smoke. The IsaacLab image passed the container test (L2) and the Isaac Sim smoke test on g7e, and its training manifest ran 2 PPO steps on a g6e.48xlarge (280 s/step).
+
+Each example README was then run exactly as written (`./validate.sh --mode cluster --skip-to 7 --level 7`, smoke edit only) from a fresh clone, on images built with the README build commands (`:latest` and each profile's `<profile>-latest`): ManiSkill (444 s/step), π₀ (428 s/step) and IsaacLab smoke on g7e.12xlarge and training on g6e.48xlarge (280 s/step); Wan (907 s/step) and DreamZero SFT → convert → eval on p5en; both showcase videos regenerated via `generate-showcase-video.sh`. Each slim profile passed L2 and the examples it serves (`dreamzero`: SFT → convert → eval; `maniskill-oft`: ManiSkill + video, Wan; `libero-pi0`: π₀ + video).
+
+---
+
+## Build a slim image (profiles)
 
 The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` target: 13 model venvs, ~48 min to build, ~18.6 GB. If you only need some of them, build a **profile** instead. A profile starts from upstream's venv-free `embodied-common-image` and installs only the venvs it lists ([`examples/profiles.env`](examples/profiles.env)). The EFA/NCCL overlay is the same as in the full image.
 
@@ -130,6 +142,7 @@ The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` tar
 | `maniskill-oft` | `openvla-oft` | ManiSkill PPO, Wan GRPO | — |
 | `libero-pi0` | `openpi` (`--env libero`, no ManiSkill) | LIBERO π₀ PPO | 32 min, 13.1 GB |
 | `dreamzero` | `dreamzero` (`--env libero`, no ManiSkill) | DreamZero SFT / convert / eval | 31 min, 12.6 GB |
+| `isaaclab-gr00t` | `gr00t` (`--env isaaclab`) + Isaac Sim 5.1 in the image (`ISAAC_SIM_VERSION`) | IsaacLab GR00T PPO | 78 min with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0`, 22.5 GB (13.7 GB without Isaac Sim) |
 
 Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~12.5–13 GB, and the main saving is build time.
 
@@ -157,24 +170,13 @@ IMAGE_TAG=examples-latest REQUIRED_VENVS=openvla-oft,openpi,dreamzero \
 
 ---
 
-## Training Examples
-
-| Example | Framework | Target | GPU Requirement | Status |
-|---------|-----------|--------|-----------------|--------|
-| [ManiSkill+OpenVLA-OFT PPO](examples/maniskill-openvlaoft-ppo/) | RLinf main@d844e648 | ManiSkill + OpenVLA-OFT PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [Wan World Model GRPO](examples/wan-openvlaoft-grpo/) | RLinf main@d844e648 | Wan world model (LIBERO) + OpenVLA-OFT GRPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | p5en.48xlarge (8x H200 141GB) | Validated |
-| [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated |
-
----
-
 ## Repository Structure
 
 ```
 rlinf-on-eks/
 ├── AGENTS.md                        # Agent system instructions: thesis, skills index
 ├── README.md                        # This file: human-facing documentation
-├── validate.sh                      # Validation harness: local checks + cluster L0-L6
+├── validate.sh                      # Validation harness: local checks + cluster L0-L7
 ├── infrastructure/                  # Layered Terraform (5 layers, orchestrated by deploy.sh)
 │   ├── README.md                    #   Layer descriptions, deploy.sh usage
 │   ├── AGENTS.md                    #   Terraform gotchas, provider quirks
@@ -205,7 +207,7 @@ rlinf-on-eks/
 |------|---------|---------|--------------|
 | Terraform | >= 1.5.0 | https://developer.hashicorp.com/terraform/install | All steps |
 | AWS CLI | v2 | https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html | All steps |
-| kubectl | >= 1.35 | https://kubernetes.io/docs/tasks/tools/ | Steps 4-6 |
+| kubectl | >= 1.36 | https://kubernetes.io/docs/tasks/tools/ | Steps 4-6 |
 | Docker | Latest | https://docs.docker.com/get-docker/ | Local builds (alternative to CodeBuild) |
 | Helm | >= 3.x | https://helm.sh/docs/intro/install/ | Troubleshooting only (Terraform manages Helm releases) |
 
@@ -213,7 +215,18 @@ rlinf-on-eks/
 
 P-class GPU instances (p4d, p5, p5en) have limited availability. In most regions you will need to purchase a [Capacity Block for ML (Machine Learning)](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/capacity-blocks-using.html) to reserve access to GPU nodes. You must also have sufficient [service quotas](https://docs.aws.amazon.com/servicequotas/latest/userguide/intro.html) for the instance type you intend to use.
 
-The tfvars files created in Step 1 configure Karpenter to provision nodes from your Capacity Block. The `target_az` ensures the VPC subnet, FSx filesystem, system nodes, and GPU nodes all deploy in the same Availability Zone as your reserved capacity.
+The ManiSkill and LIBERO + pi0 examples default to one **g7e.12xlarge** (2x RTX PRO 6000 96 GB) in the `gpu-sim` pool (`enable_sim_pool = true`; on-demand, or an ODCR via `sim_capacity_type` / `sim_capacity_reservation_selector`). Wan GRPO and DreamZero need p5en.48xlarge, which usually means a Capacity Block. For those, add the following to `infrastructure/workloads/terraform.tfvars`:
+
+```hcl
+gpu_instance_types = ["p5en.48xlarge"]          # your reserved instance type
+capacity_type      = ["reserved", "on-demand"]  # reserved = Capacity Block; on-demand = fallback
+gpu_limit          = 16                         # 8 GPUs x max nodes
+capacity_reservation_selector = [
+  { id = "cr-0123456789abcdef0" }               # your Capacity Block reservation ID
+]
+```
+
+These settings configure Karpenter to provision nodes from your Capacity Block. The `target_az` ensures the VPC subnet, FSx filesystem, system nodes, and GPU nodes all deploy in the same Availability Zone as your reserved capacity.
 
 | Variable | File | Purpose |
 |----------|------|---------|
@@ -272,7 +285,7 @@ Use the included validation harness to verify your deployment before launching t
 ./validate.sh --mode cluster --level 3
 ```
 
-See [Validation Levels](examples/README.md#validation) for the full L0-L6 breakdown.
+See [Validation Levels](examples/README.md#validation) for the full L0-L7 breakdown. L7 (`--skip-to 7 --level 7`) runs each example README exactly as written.
 
 ---
 

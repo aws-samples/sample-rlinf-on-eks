@@ -46,18 +46,18 @@ detect_cluster_config() {
 
   log_info "Detecting cluster configuration from terraform outputs..."
 
-  local tf_dir="${_TF_DIR}"
-  if [[ ! -d "${tf_dir}/.terraform" ]]; then
-    log_warn "Terraform not initialized. Set ECR_URI, CODEBUILD_PROJECT manually."
+  # ECR + CodeBuild are build-layer outputs; the region is a cluster-layer output.
+  local tf_dir="${_TF_DIR}" build_dir="${INFRA_DIR:-${REPO_ROOT}/infrastructure}/build"
+  if [[ ! -d "${build_dir}/.terraform" ]]; then
+    log_warn "Terraform not initialized in ${build_dir}. Set ECR_URI, CODEBUILD_PROJECT, CODEBUILD_BUCKET manually."
     return 0
   fi
 
-  ECR_URI=$(terraform -chdir="$tf_dir" output -json ecr_repository_urls 2>/dev/null | \
-    python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('rlinf',''))" 2>/dev/null) || true
-  CODEBUILD_PROJECT=$(terraform -chdir="$tf_dir" output -json codebuild_project_names 2>/dev/null | \
-    python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('rlinf',''))" 2>/dev/null) || true
-  CODEBUILD_BUCKET=$(terraform -chdir="$tf_dir" output -raw codebuild_source_bucket 2>/dev/null) || true
-  REGION=$(terraform -chdir="$tf_dir" output -raw target_az 2>/dev/null | sed 's/[a-z]$//' || echo "us-east-2")
+  ECR_URI=$(terraform -chdir="$build_dir" output -raw ecr_repository_url 2>/dev/null) || ECR_URI=""
+  CODEBUILD_PROJECT="${CODEBUILD_PROJECT:-$(terraform -chdir="$build_dir" output -raw codebuild_project_name 2>/dev/null || true)}"
+  CODEBUILD_BUCKET="${CODEBUILD_BUCKET:-$(terraform -chdir="$build_dir" output -raw codebuild_source_bucket 2>/dev/null || true)}"
+  REGION="${REGION:-$(terraform -chdir="$tf_dir" output -raw region 2>/dev/null || true)}"
+  REGION="${REGION:-${AWS_REGION:-us-east-2}}"
 
   export ECR_URI CODEBUILD_PROJECT CODEBUILD_BUCKET REGION
 
@@ -78,19 +78,19 @@ run_level_0() {
   log_header "L0: Infrastructure Smoke Test"
 
   # Clean up any previous run
-  cleanup_job smoke-test
+  cleanup_job smoke-test rlinf
 
   # Apply smoke test
   kubectl apply -f "${_MANIFESTS_DIR}/smoke-test.yaml"
 
   # Wait for completion
-  if ! wait_for_job smoke-test default 600; then
+  if ! wait_for_job smoke-test rlinf 600; then
     return 1
   fi
 
   # Parse results
   local logs
-  logs=$(get_job_logs smoke-test)
+  logs=$(get_job_logs smoke-test rlinf)
 
   local pass_count fail_count
   pass_count=$(echo "$logs" | sed -n 's/.*Results: \([0-9]*\) passed.*/\1/p' | tail -1)
@@ -101,7 +101,7 @@ run_level_0() {
   log_info "Smoke test: ${pass_count} passed, ${fail_count} failed"
 
   # Cleanup
-  cleanup_job smoke-test
+  cleanup_job smoke-test rlinf
 
   if (( fail_count > 0 )); then
     return 1
@@ -152,8 +152,8 @@ run_level_1() {
   fi
   log_info "Build started: ${build_id}"
 
-  # Step 3: Poll until complete (timeout: 90 min)
-  local timeout=5400
+  # Step 3: Poll until complete (timeout: 150 min, matches the CodeBuild build_timeout)
+  local timeout=9000
   local elapsed=0
   local status="IN_PROGRESS"
 
@@ -219,7 +219,8 @@ run_level_2() {
   kubectl delete configmap container-test-script -n rlinf --ignore-not-found=true 2>/dev/null || true
 
   # Apply (envsubst for IMAGE, REQUIRED_VENVS)
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/container-test.yaml" | kubectl apply -n rlinf -f -
+  # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+  envsubst '${IMAGE} ${REQUIRED_VENVS}' < "${REPO_ROOT}/infrastructure/manifests/container-test.yaml" | kubectl apply -n rlinf -f -
 
   # Wait for completion
   if ! wait_for_job container-test rlinf 1200; then
@@ -228,7 +229,7 @@ run_level_2() {
 
   # Parse results
   local logs
-  logs=$(get_job_logs container-test)
+  logs=$(get_job_logs container-test rlinf)
 
   local pass_count fail_count
   pass_count=$(echo "$logs" | sed -n 's/.*Results: \([0-9]*\) passed.*/\1/p' | tail -1)
@@ -432,7 +433,7 @@ run_level_4() {
 
   # Check logs for success
   local logs
-  logs=$(get_job_logs model-download-maniskill-openvlaoft)
+  logs=$(get_job_logs model-download-maniskill-openvlaoft rlinf)
 
   if echo "$logs" | grep -q "Download complete"; then
     log_pass "All models downloaded successfully"
@@ -545,7 +546,8 @@ run_level_5() {
     cleanup_job "$job_name" rlinf
 
     # Apply the training step test manifest
-    envsubst < "${REPO_ROOT}/tests/manifests/training-step-test.yaml" | kubectl apply -n rlinf -f -
+    # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+    envsubst '${IMAGE} ${EXAMPLE_NAME} ${VENV_NAME} ${CONFIG_NAME} ${MODEL_PATH} ${EXTRA_OVERRIDES}' < "${REPO_ROOT}/tests/manifests/training-step-test.yaml" | kubectl apply -n rlinf -f -
 
     # Wait for completion (20 min per example, uniform). libero-pi0's single
     # 1-GPU step took ~11 min of run time (~13 min wall incl. image pull) on
@@ -562,7 +564,7 @@ run_level_5() {
 
     # Parse logs
     local logs
-    logs=$(get_job_logs "$job_name")
+    logs=$(get_job_logs "$job_name" rlinf)
 
     local elapsed
     elapsed=$(timer_elapsed)
@@ -612,11 +614,12 @@ run_level_6() {
   kubectl delete service training-svc -n rlinf --ignore-not-found=true 2>/dev/null || true
 
   # Apply headless service
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/training-service.yaml" | kubectl apply -n rlinf -f -
+  kubectl apply -n rlinf -f "${REPO_ROOT}/infrastructure/manifests/training-service.yaml"
 
   # Apply StatefulSet with overrides for single-step test
   # We need to patch the StatefulSet to add HYDRA_OVERRIDES for max_steps=1
-  envsubst < "${REPO_ROOT}/infrastructure/manifests/training-statefulset.yaml" | kubectl apply -n rlinf -f -
+  # shellcheck disable=SC2016  # restricted envsubst: the manifests' in-script ${VARS} must stay literal
+  envsubst '${IMAGE}' < "${REPO_ROOT}/infrastructure/manifests/training-statefulset.yaml" | kubectl apply -n rlinf -f -
 
   # Patch to set HYDRA_OVERRIDES for single step
   kubectl set env statefulset/training -n rlinf \
@@ -630,7 +633,7 @@ run_level_6() {
   while (( elapsed < timeout )); do
     local running
     running=$(kubectl get pods -n rlinf -l app=rlinf-multi --no-headers 2>/dev/null | \
-      grep -c "Running" || echo "0")
+      grep -c "Running" || true)
     if (( running >= 2 )); then
       break
     fi
@@ -654,7 +657,10 @@ run_level_6() {
   local success=0
   while (( elapsed < timeout )); do
     local logs
-    logs=$(kubectl logs training-0 -n rlinf --tail=100 2>/dev/null || echo "")
+    # A StatefulSet restarts pod-0 once training exits 0, so also read the previous
+    # container (the finished run) or the "Global Step: 1/1" line is never seen.
+    logs="$(kubectl logs training-0 -n rlinf --previous --tail=200 2>/dev/null || true)
+$(kubectl logs training-0 -n rlinf --tail=100 2>/dev/null || true)"
 
     # Check for Ray cluster formation
     if echo "$logs" | grep -q "All .* Ray nodes connected" && (( elapsed < 60 )); then

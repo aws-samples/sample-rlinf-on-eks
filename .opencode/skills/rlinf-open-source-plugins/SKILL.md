@@ -328,6 +328,6 @@ spec:
 
 ## Related Skills
 
-- [Skill 08: PyTorch Training Scripts](pytorch-training-scripts/SKILL.md) - Scripts using these frameworks
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - K8s resources for these plugins
-- [Skill 04: Networking - EFA](networking-efa/SKILL.md) - EFA networking for NCCL
+- [Skill 08: PyTorch Training Scripts](../rlinf-pytorch-training-scripts/SKILL.md) - Scripts using these frameworks
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - K8s resources for these plugins
+- [Skill 04: Networking - EFA](../networking-efa/SKILL.md) - EFA networking for NCCL

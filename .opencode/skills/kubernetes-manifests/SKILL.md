@@ -18,7 +18,7 @@ Construct Kubernetes manifests for deploying RL training workloads on EKS. This 
 >
 > **Example (RLinf):** See `examples/<example>/manifests/` for the RLinf-specific manifests and `examples/AGENTS.md` for RLinf-specific configuration values (CONFIG_NAME, VENV_NAME, MODEL_PATH, etc.).
 
-> **NCCL test manifest**: [`infrastructure/manifests/nccl-tests-mpijob.yaml`](infrastructure/manifests/nccl-tests-mpijob.yaml) -- MPIJob pattern from awslabs/awsome-distributed-ai. Uses pre-built public ECR image.
+> **NCCL test manifest**: [`infrastructure/manifests/nccl-tests-mpijob.yaml`](../../../infrastructure/manifests/nccl-tests-mpijob.yaml) -- MPIJob pattern from awslabs/awsome-distributed-ai. Uses pre-built public ECR image.
 
 ## Architecture: Single-Node vs Multi-Node vs MPIJob
 
@@ -60,11 +60,10 @@ Construct Kubernetes manifests for deploying RL training workloads on EKS. This 
 The single-node Job runs the training script directly -- no init container is needed because the training script handles model preparation internally. The image reference uses `${IMAGE}` (`<ecr repo>:<tag>`), which is substituted at deploy time via `envsubst`.
 
 ```yaml
-# training-job.yaml
-#
-# Before applying, substitute the ECR image URI:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest
-#   envsubst < manifests/training-job.yaml | kubectl apply -f -
+# Template for a single-node training Job (the shipped ones are
+# examples/<example>/manifests/<example>.yaml). Apply with restricted envsubst:
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
+#   envsubst '${IMAGE} ${NAMESPACE}' < training-job.yaml | kubectl apply -f -
 #
 # Or manually replace ${IMAGE} below.
 apiVersion: batch/v1
@@ -201,8 +200,8 @@ The StatefulSet deploys N pods (one per GPU node). Pod-0 starts a Ray head, wait
 # training-statefulset.yaml
 #
 # Before applying, substitute the ECR image URI:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest
-#   envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
+#   envsubst '${IMAGE}' < infrastructure/manifests/training-statefulset.yaml | kubectl apply -n rlinf -f -
 #
 # Or manually replace ${IMAGE} below.
 apiVersion: apps/v1
@@ -460,19 +459,21 @@ All manifests use `${IMAGE}` (the full `<ecr repo>:<tag>`) as a placeholder for 
 
 ```bash
 # Set your image reference (full image; or :<profile>-latest for a slim profile image)
-export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest  # Replace with your values
+export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 
-# Single-node
-envsubst < manifests/training-job.yaml | kubectl apply -f -
+export NAMESPACE=rlinf
 
-# Multi-node
-kubectl apply -f manifests/training-service.yaml
-envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
+# Single-node (e.g. ManiSkill; restricted envsubst keeps in-pod shell variables literal)
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+
+# Multi-node (the L6 StatefulSet)
+kubectl apply -n rlinf -f infrastructure/manifests/training-service.yaml
+envsubst '${IMAGE}' < infrastructure/manifests/training-statefulset.yaml | kubectl apply -n rlinf -f -
 
 # Monitor
-kubectl logs -f job/rlinf-training       # single-node
-kubectl logs -f training-0                      # multi-node head
-kubectl logs -f training-1                      # multi-node worker
+kubectl logs -f -n rlinf job/rlinf-maniskill-openvlaoft   # single-node
+kubectl logs -f -n rlinf training-0             # multi-node head
+kubectl logs -f -n rlinf training-1             # multi-node worker
 ```
 
 ## Validation Checklist
@@ -489,6 +490,6 @@ kubectl logs -f training-1                      # multi-node worker
 
 ## Related Skills
 
-- [Skill 07: Container Image Building](container-image-building/SKILL.md) - Image referenced in manifests
-- [Skill 08: PyTorch Training Scripts](pytorch-training-scripts/SKILL.md) - Scripts launched by these manifests
-- [Skill 10: Kubernetes Native Features](kubernetes-native-features/SKILL.md) - Scheduling and topology
+- [Skill 07: Container Image Building](../container-image-building/SKILL.md) - Image referenced in manifests
+- [Skill 08: PyTorch Training Scripts](../rlinf-pytorch-training-scripts/SKILL.md) - Scripts launched by these manifests
+- [Skill 10: Kubernetes Native Features](../kubernetes-native-features/SKILL.md) - Scheduling and topology

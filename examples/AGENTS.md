@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-RLinf main@d844e648 (post-v0.4, 2026-10-22) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
+RLinf main@d844e648 (post-v0.4, 2026-10-22), re-validated on EKS 1.37 (2026-11) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Five examples: ManiSkill + OpenVLA-OFT PPO, LIBERO + π₀ PPO, Wan world-model GRPO, DreamZero 14B SFT (2 nodes), IsaacLab GR00T N1.5 PPO.
 
 **Paper**: [RLinf System](https://arxiv.org/abs/2509.15965) | [RLinf-VLA](https://arxiv.org/abs/2510.06710) | **Code**: [github.com/RLinf/RLinf](https://github.com/RLinf/RLinf) | **Docs**: [rlinf.readthedocs.io](https://rlinf.readthedocs.io/en/latest/)
 
@@ -11,13 +11,13 @@ RLinf main@d844e648 (post-v0.4, 2026-10-22) -- Macro-to-micro flow transformatio
 
 All RLinf training workloads deploy into the `rlinf` namespace. This is created by Terraform (`kubernetes_namespace.rlinf` in `infrastructure/cluster/main.tf`).
 
-- Manifests in `manifests/` and `examples/` hardcode `namespace: rlinf`
+- Manifests take `namespace: ${NAMESPACE}` (set `export NAMESPACE=rlinf`)
 - The `training-sa` ServiceAccount and `fsx-claim` PVC live in `rlinf`
 - MLflow deploys into the `rlinf` namespace (accessed via `mlflow.rlinf.svc.cluster.local`)
-- Infrastructure tests (L0 smoke, L3 NCCL) remain in `default`
+- Infrastructure tests: L0 smoke runs in `rlinf` (it mounts `fsx-claim`); the L3 NCCL smoke MPIJob stays in `default`
 
-Deploy with: `envsubst < examples/<example>/manifests/<example>.yaml | kubectl apply -f -`
-(No `-n rlinf` needed -- namespace is in the manifest.)
+Deploy with restricted envsubst (in-manifest shell variables must stay literal):
+`envsubst '${IMAGE} ${NAMESPACE}' < examples/<example>/manifests/<example>.yaml | kubectl apply -f -`, then `kubectl -n "$NAMESPACE" ...`.
 
 ## Related Skills
 
@@ -33,7 +33,7 @@ Load these via the `skill` tool for RLinf-specific procedural workflows:
 
 ## Examples
 
-All four examples run from ONE unified container image (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream; `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise), differing only by env vars (`CONFIG_NAME`/`VENV_NAME`/`MODEL_PATH`). The base target ships the PPO venvs (`openvla`/`openvla-oft`/`openpi`/gr00t/...) + ManiSkill & openpi assets; DreamZero's `groot` is external via `DREAMZERO_PATH`. venvs are isolated `uv` envs, so one image serves all examples — see the DreamZero section below.
+ManiSkill, π₀, Wan and DreamZero run from ONE unified container image (IsaacLab needs the `isaaclab-gr00t` profile image) (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream; `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise), differing only by env vars (`CONFIG_NAME`/`VENV_NAME`/`MODEL_PATH`). The base target ships the PPO venvs (`openvla`/`openvla-oft`/`openpi`/gr00t/...) + ManiSkill & openpi assets; DreamZero's `groot` is external via `DREAMZERO_PATH`. venvs are isolated `uv` envs, so one image serves all examples — see the DreamZero section below.
 
 | Example | `CONFIG_NAME` | `VENV_NAME` | `MODEL_PATH` |
 |---------|---------------|-------------|--------------|
@@ -55,6 +55,15 @@ LIBERO PPO examples additionally need: `LIBERO_DATASET_DIR=/fsx/datasets/libero`
   - Profiles use `--env maniskill_libero` (matches the validated full image), **except the LIBERO-only `libero-pi0` and `dreamzero`**, which use `--env libero` (no ManiSkill/SAPIEN, ~1.5 GB smaller; upstream documents `install.sh embodied --model dreamzero --env libero` for DreamZero SFT + LIBERO eval). Both are revalidated (pi0 PPO 5-step; DreamZero 2-node SFT + convert + LIBERO eval smoke).
   - Custom profile: `PROFILE=<name> INSTALLS="v:m:e ..."`.
   - Re-check `embodied-common-image` and the `install.sh` options on every `UPSTREAM_REF` bump.
+- **IsaacLab (`isaaclab-gr00t` profile, `examples/isaaclab-gr00t-ppo/`)**:
+  - Isaac Sim 5.1 needs RT-core GPUs (g7e/g6e/g5; not A100/H100/H200), so it runs on the `gpu-sim` pool. **Validated default (2026-11): g7e.24xlarge (4× RTX PRO 6000), fallback g6e.24xlarge (4× L40S); 4 GPUs with env/rollout/actor on 0-3, `actor.micro_batch_size=64`.** 4 GPUs were as fast as or faster than 8 (only the ~550M action head trains); batch 128 gained ≤5%. On 4× A10G (g5.12xlarge): `actor.micro_batch_size=32` + `actor.enable_offload=True` without eval; `micro_batch_size=8` + offload with eval (`val_check_interval > 0`): batch 32 + eval OOMs there (eval envs are created at start-up). Results: `examples/isaaclab-gr00t-ppo/README.md` (EKS 1.37: smoke on g7e.12xlarge 303 env-steps/s, 2 PPO steps of the committed manifest on g6e.48xlarge, 4 of 8 GPUs, 280 s/step; the per-GPU table and evals are from EKS 1.35). The manifest also accepts g7e/g6e.48xlarge for scarce 4-GPU capacity.
+  - **Blackwell (sm_120, RTX PRO 6000)**: the upstream prebuilt flash-attn 2.8.3 wheel has only sm_80 + sm_90 kernels → `no kernel image is available` at the first attention call (L40S sm_89 runs the sm_80 code). Build the profile with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0` (`Dockerfile.profile` rebuilds flash-attn from source; ~60 min extra; `FLASH_ATTN_MAX_JOBS` ≤ 6 on a 145 GB host, 16 was OOM-killed). The buildspec defaults `FLASH_ATTN_ARCHS` to these archs for `PROFILE=isaaclab-gr00t`. A smoke test must run an attention call: `import flash_attn` passes on GPUs it has no kernels for.
+  - **A new FSx loads files lazily from S3** (only matters for FSx-staged Isaac Sim, or large datasets) (data-repository association): the first boot took ~22 min. Prefetch after creating FSx (`find ... | xargs -P 48 cat > /dev/null`, ~10 min for 18 GB). Stage once; FSx auto-exports to S3, so a re-created FSx (e.g. after an AZ move) refills without re-staging.
+  - **Isaac Sim is baked into the image** (`/opt/isaacsim`, build args `ISAAC_SIM_VERSION=5.1.0` + `ACCEPT_ISAAC_SIM_EULA=Y` in `Dockerfile.profile`), like NVIDIA's `isaac-sim` containers: simulator binaries on shared storage drift from the image and make FSx a hard dependency. The customer's own build downloads it (private ECR, no redistribution). FSx staging (`stage-isaacsim.yaml`, `/fsx/isaacsim/5.1.0`) remains as a fallback; manifests set `ISAAC_PATH=auto` (image copy if present, else FSx), and `run_training_eks.sh` sources `${ISAAC_PATH}/setup_conda_env.sh`.
+  - Set `OMNI_KIT_ACCEPT_EULA=YES` (accepts the NVIDIA license); shader cache on FSx.
+  - The `gr00t` venv has **torch 2.11.0+cu128** (and flash-attn built for it). Isaac Sim's `setup_conda_env.sh` prepends its bundled **torch 2.7** (`exts/omni.isaac.ml_archive/pip_prebundle`) to `PYTHONPATH`, which breaks flash-attn (`undefined symbol ... c10_cuda_check_implementation`). `run_training_eks.sh` removes that entry after sourcing.
+  - pandas: the gr00t `--env isaaclab` install ends with pandas 3.1 + numpy 1.26 (`Please upgrade numpy to >= 2.0.2`). `Dockerfile.profile` re-pins `pandas<3.1` in numpy-1.x venvs.
+  - Stay on 5.1: Isaac Sim 6.x needs Isaac Lab 3.0, where RLinf's stack-cube task does not exist.
 - **Manifests take `${IMAGE}`** (full `<ecr repo>:<tag>`), not `${ECR_URI}:latest`. envsubst has no defaults, so an unset `IMAGE` renders `image: ` and the pod fails. `tests/lib/cluster.sh` derives `IMAGE=${ECR_URI}:${IMAGE_TAG:-latest}`.
 - **Two-stage build is required**: upstream RLinf Dockerfile handles 20 BUILD_TARGETs (reason + 19 embodied) with multi-venv (`uv`). Don't replicate -- build upstream first, layer EFA on top. See `examples/Dockerfile` and `examples/buildspec.yml`.
 - **`NO_MIRROR=1` build arg required** for upstream RLinf Dockerfile on CodeBuild (otherwise defaults to unreachable Chinese mirrors).
@@ -67,6 +76,8 @@ LIBERO PPO examples additionally need: `LIBERO_DATASET_DIR=/fsx/datasets/libero`
 
 ### Training
 - **`runner.max_steps=1`** limits training to 1 PPO step (for validation). Use with `runner.save_interval=-1 runner.val_check_interval=-1`.
+- **Wan manifest runs the config's full 1000 steps**: for a short check add `runner.max_steps=2` to its `HYDRA_OVERRIDES`. On EKS 1.37 (2026-11): ~904 s/step on 1 p5en (actor ~236 s, 16 rollout epochs × ~39 s).
+- **DreamZero `convert-checkpoint.yaml` needs 64–128 GiB RAM**: the default system nodes (m5.2xlarge, 32 GiB) cannot run it, so the manifest selects the gpu-training pool (where the SFT ran) and tolerates `nvidia.com/gpu`; it requests no GPU. EKS 1.37 run (2026-11): 20-step SFT on 2× p5en in 25 min (16-shard DCP 208 GB), convert 12 min (`full_weights.pt` 91.7 GB), eval smoke 26 min (32 trajectories).
 - **`run_embodiment.sh` does NOT forward Hydra overrides**. Call `train_embodied_agent.py` directly. The `run_training_eks.sh` launcher supports `HYDRA_OVERRIDES` env var.
 - **MuJoCo headless rendering**: requires `MUJOCO_GL=osmesa` + `PYOPENGL_PLATFORM=osmesa` (not EGL). Set in Dockerfile.
 - **LIBERO's `__init__.py` calls `input()` at import time** -- hangs in containers. Must pre-create `~/.libero/config.yaml` and set `LIBERO_DATASET_DIR`.

@@ -15,8 +15,9 @@
 #
 # Usage:
 #   export EXAMPLE_NAME=maniskill-openvlaoft VENV_NAME=openvla-oft ...
-#   envsubst < tests/manifests/training-step-test.yaml | kubectl apply -f -
-#   kubectl logs -f job/training-step-test-${EXAMPLE_NAME}
+#   envsubst '${IMAGE} ${EXAMPLE_NAME} ${VENV_NAME} ${CONFIG_NAME} ${MODEL_PATH} ${EXTRA_OVERRIDES}' \
+#     < tests/manifests/training-step-test.yaml | kubectl apply -n rlinf -f -
+#   kubectl logs -f -n rlinf job/training-step-test-${EXAMPLE_NAME}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -87,7 +88,8 @@ spec:
               fi
 
               # Verify model
-              if [ ! -f "${MODEL_PATH}/config.json" ]; then
+              # HF checkpoints ship config.json; openpi (pi0) ships model.safetensors only.
+              if [ ! -f "${MODEL_PATH}/config.json" ] && [ ! -f "${MODEL_PATH}/model.safetensors" ]; then
                 echo "ERROR: Model not found at ${MODEL_PATH}"
                 exit 1
               fi

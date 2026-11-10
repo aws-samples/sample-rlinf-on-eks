@@ -73,7 +73,7 @@ resource "aws_iam_policy" "karpenter" {
   #   provisioning/tagging/deletion actions are scoped to region-qualified
   #   per-resource-type ARNs with aws:RequestTag/aws:ResourceTag +
   #   ec2:CreateAction conditions, ported verbatim from the official AWS Karpenter
-  #   v1.11.1 controller policy. Validated on a live EKS cluster: Karpenter
+  #   v1.15.1 controller policy. Validated on a live EKS cluster: Karpenter
   #   provisions nodes and runs instance-profile GC cleanly under this policy.
   # checkov:skip=CKV_AWS_286: iam:PassRole is scoped to the Karpenter node role ARN
   #   with an iam:PassedToService=ec2.amazonaws.com condition, and instance-profile
@@ -89,6 +89,7 @@ resource "aws_iam_policy" "karpenter" {
           "ec2:DescribeCapacityReservations",
           "ec2:DescribeImages",
           "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
           "ec2:DescribeInstanceTypeOfferings",
           "ec2:DescribeInstanceTypes",
           "ec2:DescribeLaunchTemplates",
@@ -102,7 +103,7 @@ resource "aws_iam_policy" "karpenter" {
         ]
         Resource = "*"
       },
-      # --- Official Karpenter v1.11.1 scoped EC2 provisioning statements ---
+      # --- Official Karpenter v1.15.1 scoped EC2 provisioning statements ---
       {
         Sid    = "AllowScopedEC2InstanceAccessActions"
         Effect = "Allow"
@@ -238,7 +239,7 @@ resource "aws_iam_policy" "karpenter" {
         # support), so it uses Resource="*". Required by Karpenter's
         # instanceprofile.garbagecollection controller; without it the controller
         # logs AccessDenied and cannot reap orphaned instance profiles. Matches
-        # the official AWS Karpenter v1.11.1 policy's "AllowInstanceProfileList".
+        # the official AWS Karpenter v1.15.1 policy's "AllowInstanceProfileList".
         Sid      = "KarpenterInstanceProfileList"
         Effect   = "Allow"
         Action   = "iam:ListInstanceProfiles"
@@ -276,7 +277,7 @@ resource "helm_release" "karpenter" {
   namespace  = "kube-system"
   repository = "oci://public.ecr.aws/karpenter"
   chart      = "karpenter"
-  version    = "1.11.1"
+  version    = "1.15.1"
   wait       = true
   atomic     = true
 
@@ -312,13 +313,33 @@ resource "helm_release" "karpenter" {
 # Replaces standalone device plugin + DCGM exporter with a unified operator.
 # Manages: device plugin, DCGM exporter, GPU Feature Discovery, container toolkit.
 # Driver installation is disabled because EKS GPU AMI already includes NVIDIA drivers.
+
+# DCGM exporter metric list: the chart default with DCGM_FI_PROF_SM_ACTIVE and
+# DCGM_FI_PROF_SM_OCCUPANCY enabled (commented out upstream). SM_ACTIVE is the
+# GPU-efficiency metric scripts/gpu_profile.py reports per training phase.
+resource "kubernetes_namespace" "gpu_operator" {
+  metadata {
+    name = "gpu-operator"
+  }
+}
+
+resource "kubernetes_config_map" "dcgm_metrics" {
+  metadata {
+    name      = "dcgm-metrics"
+    namespace = kubernetes_namespace.gpu_operator.metadata[0].name
+  }
+  data = {
+    "dcgm-metrics.csv" = file("${path.module}/files/dcgm-metrics.csv")
+  }
+}
+
 resource "helm_release" "gpu_operator" {
   name             = "gpu-operator"
   repository       = "https://helm.ngc.nvidia.com/nvidia"
   chart            = "gpu-operator"
-  namespace        = "gpu-operator"
-  create_namespace = true
-  version          = "v24.9.2"
+  namespace        = kubernetes_namespace.gpu_operator.metadata[0].name
+  create_namespace = false
+  version          = "v26.7.2"
 
   # Disable driver install -- EKS GPU AMI already has NVIDIA drivers
   set {
@@ -338,10 +359,53 @@ resource "helm_release" "gpu_operator" {
     value = "true"
   }
 
+  # dcgm-exporter 4.x (DCGM 4.6.1). The chart's default 3.3.9-3.6.1 (DCGM 3.3.9)
+  # cannot load the profiling module on Blackwell (RTX PRO 6000, g7e), so
+  # DCGM_FI_PROF_* (SM_ACTIVE, tensor) were missing there (NVIDIA/dcgm-exporter#707).
+  # Matches the GPU Operator v26.7.2 default.
+  set {
+    name  = "dcgmExporter.version"
+    value = var.dcgm_exporter_version
+  }
+
+  # Metric list from the dcgm-metrics ConfigMap (adds SM_ACTIVE / SM_OCCUPANCY)
+  set {
+    name  = "dcgmExporter.config.name"
+    value = kubernetes_config_map.dcgm_metrics.metadata[0].name
+  }
+  set {
+    name  = "dcgmExporter.env[0].name"
+    value = "DCGM_EXPORTER_COLLECTORS"
+  }
+  set {
+    name  = "dcgmExporter.env[0].value"
+    value = "/etc/dcgm-exporter/dcgm-metrics.csv"
+  }
+
+  # The operator owns the DCGM ServiceMonitor: a separately applied one is deleted when
+  # the operator reconciles the exporter, leaving Prometheus without GPU metrics.
+  set {
+    name  = "dcgmExporter.serviceMonitor.enabled"
+    value = var.enable_monitoring ? "true" : "false"
+  }
+
   # Enable GPU Feature Discovery (auto-labels nodes with GPU model, memory, etc.)
   set {
     name  = "gfd.enabled"
     value = "true"
+  }
+
+  # GDRCopy off: the AMI manages the driver (driver.enabled=false), and the gdrcopy
+  # validator otherwise blocks GPUs on g4dn/g5 (the AMI ships gdrdrv only for the open driver).
+  set {
+    name  = "gdrcopy.enabled"
+    value = "false"
+  }
+
+  # Confidential Computing manager: on by default since v26.x; not used here.
+  set {
+    name  = "ccManager.enabled"
+    value = "false"
   }
 
   # Tolerate GPU node taints so operator components schedule on GPU nodes
@@ -407,48 +471,6 @@ resource "helm_release" "prometheus" {
       error_message = "grafana_password must be set when enable_monitoring = true (e.g. export TF_VAR_grafana_password=... or pass -var grafana_password=...). Do not commit a real value."
     }
   }
-}
-
-# --- DCGM Exporter ServiceMonitor ---
-# The NVIDIA GPU Operator creates the DCGM exporter DaemonSet and Service
-# (nvidia-dcgm-exporter on port 9400) but does NOT create a ServiceMonitor.
-# Without this, Prometheus never discovers or scrapes GPU metrics.
-# We apply via kubectl (not kubernetes_manifest) because kubernetes_manifest
-# requires CRD discovery at plan time, which fails on fresh clusters.
-resource "null_resource" "dcgm_service_monitor" {
-  count = var.enable_monitoring ? 1 : 0
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      kubectl apply -f - <<'EOF'
-      apiVersion: monitoring.coreos.com/v1
-      kind: ServiceMonitor
-      metadata:
-        name: nvidia-dcgm-exporter
-        namespace: gpu-operator
-        labels:
-          app: nvidia-dcgm-exporter
-      spec:
-        selector:
-          matchLabels:
-            app: nvidia-dcgm-exporter
-        namespaceSelector:
-          matchNames:
-            - gpu-operator
-        endpoints:
-          - port: gpu-metrics
-            path: /metrics
-            interval: "15s"
-      EOF
-    EOT
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl delete servicemonitor nvidia-dcgm-exporter -n gpu-operator --ignore-not-found"
-  }
-
-  depends_on = [helm_release.gpu_operator, helm_release.prometheus, null_resource.update_kubeconfig]
 }
 
 # --- KubeRay Operator (Optional) ---

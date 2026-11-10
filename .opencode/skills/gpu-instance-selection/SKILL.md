@@ -159,5 +159,5 @@ aws ec2 create-capacity-reservation \
 
 ## Related Skills
 
-- [Skill 01: EKS Cluster Provisioning](eks-cluster-provisioning/SKILL.md)
-- [Skill 03: AMI and Node Configuration](ami-and-node-configuration/SKILL.md)
+- [Skill 01: EKS Cluster Provisioning](../eks-cluster-provisioning/SKILL.md)
+- [Skill 03: AMI and Node Configuration](../ami-and-node-configuration/SKILL.md)

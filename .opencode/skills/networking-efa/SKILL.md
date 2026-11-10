@@ -315,7 +315,7 @@ See the topology labeler DaemonSet in `manifests/topology-labeler.yaml`.
 
 ## Related Skills
 
-- [Skill 01: EKS Cluster Provisioning](eks-cluster-provisioning/SKILL.md)
-- [Skill 03: AMI and Node Configuration](ami-and-node-configuration/SKILL.md)
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md)
-- [Skill 13: Functional Testing](functional-testing/SKILL.md)
+- [Skill 01: EKS Cluster Provisioning](../eks-cluster-provisioning/SKILL.md)
+- [Skill 03: AMI and Node Configuration](../ami-and-node-configuration/SKILL.md)
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md)
+- [Skill 13: Functional Testing](../functional-testing/SKILL.md)

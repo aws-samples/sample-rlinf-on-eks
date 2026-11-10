@@ -15,8 +15,9 @@
 #   - Pre-trained model weights staged on FSx
 #
 # Before applying, substitute the ECR image URI:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
-#   envsubst < manifests/training-statefulset.yaml | kubectl apply -f -
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
+#   envsubst '${IMAGE}' < infrastructure/manifests/training-statefulset.yaml | kubectl apply -n rlinf -f -
+# (restricted envsubst, as L6 does: ${HEAD_ADDR}, ${UV_PATH} etc. are in-pod shell variables)
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -148,8 +149,6 @@ spec:
             # --- Experiment Tracking (MLflow) ---
             - name: MLFLOW_TRACKING_URI
               value: "http://mlflow.rlinf.svc.cluster.local"
-            - name: EXPERIMENT_NAME
-              value: "${EXPERIMENT_NAME}"
             # --- NCCL + EFA ---
             - name: NCCL_DEBUG
               value: "WARN"

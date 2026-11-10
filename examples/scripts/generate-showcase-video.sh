@@ -99,20 +99,24 @@ fi
 
 if [[ -z "${S3_BUCKET:-}" ]]; then
   log_fail "S3_BUCKET environment variable not set"
-  echo "  Set it with: export S3_BUCKET=\$(terraform -chdir=infrastructure/storage output -raw fsx_s3_bucket)"
+  echo "  Set it with: export S3_BUCKET=\$(terraform -chdir=infrastructure/storage output -raw s3_bucket_name)"
   exit 1
 fi
 
 if [[ -z "${CKPT_PATH:-}" ]]; then
   log_fail "CKPT_PATH environment variable not set"
   echo "  Set it to the full_weights.pt path on FSx, e.g.:"
-  echo "  export CKPT_PATH=/fsx/checkpoints/<run>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt"
+  echo "  export CKPT_PATH=/fsx/checkpoints/<EXPERIMENT_NAME>/<experiment_name>/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt"
   exit 1
 fi
 
 # --- Extract metadata from manifest annotations ---
 # We parse the YAML directly (after envsubst) to avoid needing the Job deployed first.
-rendered=$(envsubst < "$MANIFEST")
+# Restricted envsubst: only the manifest's own variables. The container script also uses
+# ${PYTHONPATH:-} / ${LD_LIBRARY_PATH:-}, which must stay literal (unrestricted envsubst
+# would bake in this machine's values).
+# shellcheck disable=SC2016
+rendered=$(envsubst '${IMAGE} ${NAMESPACE} ${S3_BUCKET} ${CKPT_PATH} ${LORA_PATH}' < "$MANIFEST")
 get_annotation() {
   local key="$1"
   echo "$rendered" | grep "rlinf.io/$key" | head -1 | sed 's/.*: *"\(.*\)"/\1/'
@@ -202,12 +206,19 @@ log_info "Finding video output..."
 
 VIDEO_S3_PREFIX="s3://$S3_BUCKET/checkpoints/$VIDEO_OUTPUT_PATH/video/eval/"
 
-# List all mp4 files and pick the largest (most complete episode)
-best_video=$(aws s3 ls "$VIDEO_S3_PREFIX" --recursive 2>/dev/null \
-  | grep '\.mp4$' \
-  | sort -k3 -n -r \
-  | head -1 \
-  | sed 's/^[0-9 -]*[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\} *[0-9]* //')
+# List all mp4 files and pick the largest (most complete episode). FSx exports new
+# files to S3 asynchronously (data-repository auto-export), so the video can appear in
+# S3 a minute or more after the Job completes: retry for up to VIDEO_EXPORT_WAIT seconds.
+best_video=""
+for _ in $(seq 1 $(( ${VIDEO_EXPORT_WAIT:-600} / 15 ))); do
+  best_video=$(aws s3 ls "$VIDEO_S3_PREFIX" --recursive 2>/dev/null \
+    | { grep '\.mp4$' || true; } \
+    | sort -k3 -n -r \
+    | head -1 \
+    | sed 's/^[0-9 -]*[0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\} *[0-9]* //')
+  [[ -n "$best_video" ]] && break
+  sleep 15
+done
 
 if [[ -z "$best_video" ]]; then
   log_fail "No .mp4 files found at $VIDEO_S3_PREFIX"

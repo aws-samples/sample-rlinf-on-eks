@@ -14,7 +14,7 @@
 #
 # Usage:
 #   export NAMESPACE=rlinf  # or your namespace
-#   envsubst < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
 #   kubectl logs -f job/model-download-maniskill-openvlaoft -n $NAMESPACE
 apiVersion: batch/v1
 kind: Job

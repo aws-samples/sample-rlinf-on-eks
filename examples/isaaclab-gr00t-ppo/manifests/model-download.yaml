@@ -1,0 +1,90 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+# Download Model Weights for IsaacLab Franka stack-cube + GR00T N1.5 PPO
+#
+# Downloads the GR00T N1.5 SFT checkpoint trained on human demos of the IsaacLab
+# stack-cube task (RLinf/IsaacLab-Stack-Cube-Data), ~7.6 GB. The Eagle VLM backbone
+# config/processor ships inside the gr00t package (Isaac-GR00T n1.5-release), so no
+# separate backbone download is needed.
+#
+# Prerequisites:
+#   - FSx for Lustre PVC (fsx-claim) available in the rlinf namespace
+#
+# Usage:
+#   export NAMESPACE=rlinf  # or your namespace
+#   envsubst '${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   kubectl logs -f job/model-download-isaaclab-gr00t -n $NAMESPACE
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: model-download-isaaclab-gr00t
+  namespace: ${NAMESPACE}
+  labels:
+    app: model-download
+    example: isaaclab-gr00t-ppo
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 3600
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: downloader
+          image: python:3.11-slim
+          command:
+            - bash
+            - -c
+            - |
+              set -euo pipefail
+
+              echo "============================================"
+              echo "  IsaacLab + GR00T: Model Download"
+              echo "============================================"
+
+              pip install -q huggingface_hub
+
+              download_model() {
+                local model_id=$1
+                local target_dir=$2
+                echo ""
+                echo "=== Model: $model_id ==="
+                echo "  Target: $target_dir"
+                if [ -f "$target_dir/config.json" ]; then
+                  echo "  Already exists. Skipping."
+                  return
+                fi
+                echo "  Downloading..."
+                python3 -c "
+              from huggingface_hub import snapshot_download
+              snapshot_download(
+                  repo_id='$model_id',
+                  local_dir='$target_dir',
+                  local_dir_use_symlinks=False,
+              )
+              print('  Download complete')
+              "
+                du -sh "$target_dir" | awk '{print "  Size: " $1}'
+              }
+
+              # Model: GR00T N1.5 SFT checkpoint for Franka stack-cube
+              download_model "RLinf/RLinf-Gr00t-SFT-Stack-cube" "/fsx/models/RLinf-Gr00t-SFT-Stack-cube"
+
+              echo ""
+              echo "=== Download complete ==="
+              echo "Models:"
+              du -sh /fsx/models/RLinf-Gr00t-SFT-Stack-cube 2>/dev/null || echo "  (not found)"
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+          volumeMounts:
+            - name: fsx
+              mountPath: /fsx
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim

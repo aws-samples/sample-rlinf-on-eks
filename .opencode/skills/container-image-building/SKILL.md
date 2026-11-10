@@ -326,7 +326,7 @@ Trigger a build:
 # Use zip -r (not git archive -- git archive misses uncommitted files)
 zip -r <cluster-name>.zip . -x ".git/*" -x "infrastructure/*/.terraform/*"
 aws s3 cp <cluster-name>.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/<cluster-name>.zip
-aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -json codebuild_project_names | jq -r '."<reference-name>"')
+aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
 ```
 
 ### CodeBuild Operational Notes
@@ -350,6 +350,6 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 ## Related Skills
 
-- [Skill 08: PyTorch Training Scripts](pytorch-training-scripts/SKILL.md) - Scripts that run inside this image
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Pod specs referencing this image
-- [Skill 12: Deployment Method](deployment-method/SKILL.md) - CI/CD pipeline for image builds
+- [Skill 08: PyTorch Training Scripts](../rlinf-pytorch-training-scripts/SKILL.md) - Scripts that run inside this image
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Pod specs referencing this image
+- [Skill 12: Deployment Method](../deployment-method/SKILL.md) - CI/CD pipeline for image builds

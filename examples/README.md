@@ -29,7 +29,7 @@ This gives us:
 - **All upstream dependency management preserved** (uv, multi-venv, install.sh, model-specific isolation)
 - **Multiple models per image** (e.g., `embodied-maniskill_libero` ships 13 venvs: openvla, openvla-oft, openpi, gr00t, gr00t_n1d6, gr00t_n1d7, dexbotic, starvla, abot_m0, dreamzero, molmoact2, evo1, fastwam)
 - **EFA networking for multi-node NCCL (NVIDIA Collective Communications Library) on EKS**
-- **Any `BUILD_TARGET` works** -- we can build EKS images for any of the 20 upstream variants
+- **Any `BUILD_TARGET` works** -- any upstream `embodied-*` (or `reason`) target in RLinf's `docker/Dockerfile` can be layered
 
 The `switch_env` utility selects the active model at runtime:
 ```bash
@@ -40,34 +40,35 @@ source switch_env openpi       # pi0
 
 ## Examples
 
-All examples run from the **same unified container image** (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream, built once and pushed to `:latest`). Examples differ only by the `CONFIG_NAME`, `VENV_NAME`, and `MODEL_PATH` environment variables — the PPO examples activate `openvla`/`openvla-oft`/`openpi`, DreamZero activates `dreamzero`. venvs are isolated, so one image serves every example.
+Four examples run from the **same unified image** (`BUILD_TARGET=embodied-maniskill_libero`, pushed as `:latest`), which ships every venv they need; they differ only by `CONFIG_NAME`, `VENV_NAME` and `MODEL_PATH`. IsaacLab needs Isaac Sim and RT-core GPUs, so it uses the `isaaclab-gr00t` image profile (`:isaaclab-gr00t-latest`). For smaller per-example images, see "Build a slim image" in the main [README](../README.md).
 
-| Example | Simulator | Algorithm | Model | Venv | Config |
-|---------|-----------|-----------|-------|------|--------|
-| [ManiSkill + OpenVLA-OFT PPO](maniskill-openvlaoft-ppo/) | ManiSkill3 | PPO | OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
-| [Wan World Model GRPO](wan-openvlaoft-grpo/) | Wan (LIBERO-Spatial) | GRPO | OpenVLA-OFT | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` |
-| [LIBERO + pi0 PPO](libero-pi0-ppo/) | LIBERO | PPO | pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
-| [DreamZero SFT](dreamzero/) | LIBERO | SFT | Wan2.1-14B | `dreamzero` | `libero_sft_dreamzero_14b` |
+| Example | Simulator | Algorithm | Model | Venv | Config | Default instance | Image |
+|---------|-----------|-----------|-------|------|--------|------------------|-------|
+| [ManiSkill + OpenVLA-OFT PPO](maniskill-openvlaoft-ppo/) | ManiSkill3 | PPO | OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft` | 1x g7e.12xlarge (`gpu-sim`) | `:latest` |
+| [LIBERO + pi0 PPO](libero-pi0-ppo/) | LIBERO | PPO | pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` | 1x g7e.12xlarge (`gpu-sim`) | `:latest` |
+| [Wan World Model GRPO](wan-openvlaoft-grpo/) | Wan (LIBERO-Spatial) | GRPO | OpenVLA-OFT | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` | 1x p5en.48xlarge | `:latest` |
+| [DreamZero SFT](dreamzero/) | LIBERO | SFT | DreamZero 14B (Wan2.1 backbone) | `dreamzero` | `libero_sft_dreamzero_14b` | 2x p5en.48xlarge | `:latest` |
+| [IsaacLab GR00T PPO](isaaclab-gr00t-ppo/) | Isaac Lab (Isaac Sim 5.1) | PPO | GR00T N1.5 | `gr00t` | `isaaclab_franka_stack_cube_ppo_gr00t` | 1x g7e.24xlarge or g6e.24xlarge (`gpu-sim`) | `:isaaclab-gr00t-latest` |
 
 ## Compute Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| **GPU** | 8x 80GB+ GPUs (Graphics Processing Units) per node |
-| **Multi-node** | 1-2 nodes (8-16 GPUs total) |
-| **VRAM per GPU** | 80GB+ (FSDP full-shard with CPU offload) |
-| **CPU** | High core count per node (for parallel env rendering) |
-| **Memory** | ~1.8TB per node |
-| **Network** | Low-latency, high-bandwidth for NCCL allreduce (EFA) |
-| **Storage** | Shared filesystem for checkpoints + model weights (FSx for Lustre). Plan >=250GB free for the DreamZero 14B example (a 14B FSDP DCP checkpoint is ~207 GB on disk (223.7 GB apparent)). |
+Per example, as shipped (each example README lists the alternatives):
 
-This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for the DreamZero example; other GPU instances with equivalent-or-greater per-GPU VRAM and EFA support are expected to work. Infrastructure/EFA/NCCL validation only was run on g6.8xlarge.
+| Example | GPUs | Node pool | EFA | Notes |
+|---------|------|-----------|-----|-------|
+| ManiSkill + OpenVLA-OFT PPO | 2x RTX PRO 6000 96 GB (g7e.12xlarge) | `gpu-sim` | No | p5en.48xlarge (8x H200) is the documented large-GPU alternative |
+| LIBERO + pi0 PPO | 2x RTX PRO 6000 96 GB (g7e.12xlarge) | `gpu-sim` | No | Same alternative |
+| Wan World Model GRPO | 8x H200 141 GB (p5en.48xlarge) | `gpu-training` | No (single node) | |
+| DreamZero SFT | 16x H200 (2x p5en.48xlarge) | `gpu-training` | Yes, 16 per node | FSDP2 across nodes; plan >= 250 GB free on FSx (a 14B DCP checkpoint is ~207 GB on disk) |
+| IsaacLab GR00T PPO | 4x RTX PRO 6000 or 4x L40S (g7e/g6e.24xlarge; .48xlarge also accepted) | `gpu-sim` | No | Isaac Sim needs RT-core GPUs (not A100/H100/H200) |
+
+The `gpu-sim` pool needs `enable_sim_pool = true` in the workloads layer. All examples share FSx for Lustre (`fsx-claim`) for model weights, datasets and checkpoints. A g6.8xlarge (~$1/hr) is enough to validate the infrastructure (L0-L4, EFA), not to train.
 
 ## Software Stack
 
 | Layer | Component | Version |
 |-------|-----------|---------|
-| **Python** | uv-managed venvs | Python 3.11 |
+| **Python** | uv-managed venvs | Python 3.11 (upstream `install.sh` default; set per venv) |
 | **Framework** | PyTorch | 2.11.0+cu128 (upstream default) |
 | **CUDA** | CUDA (Compute Unified Device Architecture) Toolkit | 12.8.1 |
 | **RL Framework** | RLinf | main@d844e648 (post-v0.4) |
@@ -82,7 +83,7 @@ This stack was validated on p5en.48xlarge (8x NVIDIA H200 141GB per node) for th
 The training container is built in two stages:
 
 - **Stage 1 (upstream RLinf)**: RL framework, training scripts, Hydra configs, simulators, multi-venv isolation. RLinf is a veRL fork with embodied-AI extensions (macro-to-micro flow, 2.4x throughput).
-- **Stage 2 (this repo)**: AWS EFA networking stack for multi-node NCCL, EKS-specific launch scripts, optional extras (DreamZero).
+- **Stage 2 (this repo)**: AWS EFA networking stack for multi-node NCCL, EKS-specific launch scripts, the DreamZero `groot` checkout.
 
 ![Container Anatomy](diagrams/container-anatomy.drawio.svg)
 
@@ -91,7 +92,7 @@ The training container is built in two stages:
 | CUDA base | GPU drivers, cuDNN (CUDA Deep Neural Network library) | System |
 | RLinf venvs | Per-model Python environments (openvla, openpi, etc.) | `/opt/venv/` |
 | RLinf source | PPO training loop, Hydra configs, veRL workers | `/workspace/RLinf/` |
-| DreamZero (optional) | Video world model SFT | `/workspace/DreamZero/` |
+| DreamZero (`groot`) | Model code for the DreamZero example (on `PYTHONPATH` via `DREAMZERO_PATH`) | `/workspace/DreamZero/` |
 | EFA stack | libfabric 2.6, aws-ofi-nccl 1.21.1, NCCL 2.31.2, nccl-tests, GDRCopy (GPU Direct RDMA Copy), OpenMPI | `/opt/amazon/`, `/opt/nccl/` |
 | EKS scripts | Training launcher, install_extras | `/workspace/eks/scripts/` |
 | Runtime mounts | Model weights, datasets, checkpoints, EFA devices | `/fsx/` (PVC (PersistentVolumeClaim)) |
@@ -115,67 +116,45 @@ For additional experiment tracking (run comparison, artifact management), enable
 
 ```
 examples/
-├── Dockerfile                          # Stage 2: EFA overlay on upstream image
-├── buildspec.yml                       # CodeBuild: two-stage build
+├── Dockerfile                          # Stage 2: EFA overlay on the upstream image
+├── Dockerfile.profile                  # Slim image profiles (on upstream embodied-common-image)
+├── profiles.env                        # Profile definitions (venvs, assets)
+├── buildspec.yml                       # CodeBuild: full image or a profile
 ├── README.md                           # This file
+├── AGENTS.md                           # Agent notes: gotchas, pins, per-example details
+├── diagrams/                           # Shared infrastructure + container diagrams
 ├── scripts/
 │   ├── run_training_eks.sh             # Generic training launcher (any config)
-│   ├── plot_training_curve.py          # TensorBoard events → training curve PNG
-│   └── install_extras.sh              # Conditional package installer for EXTRAS
+│   ├── generate-showcase-video.sh      # Eval-video Job -> S3 -> showcase .mp4
+│   ├── plot_training_curve.py          # TensorBoard events -> training curve PNG
+│   ├── resolve_profile.sh              # PROFILE -> INSTALLS/ASSETS (buildspec.yml)
+│   ├── install_extras.sh               # Conditional package installer for EXTRAS
+│   └── upstream-build-patches/         # Optional patches for the upstream build
 ├── maniskill-openvlaoft-ppo/           # ManiSkill + OpenVLA-OFT PPO
-├── wan-openvlaoft-grpo/                # Wan World Model GRPO (OpenVLA-OFT)
 ├── libero-pi0-ppo/                     # LIBERO + pi0 PPO
-└── dreamzero/                          # DreamZero SFT (multi-node; see dreamzero/README.md)
+├── wan-openvlaoft-grpo/                # Wan World Model GRPO (OpenVLA-OFT)
+├── dreamzero/                          # DreamZero SFT -> convert -> eval (2 nodes)
+└── isaaclab-gr00t-ppo/                 # IsaacLab GR00T N1.5 PPO (RT-core GPUs)
 ```
 
 ## Quick Start
 
+The main [README](../README.md) Quick Start covers deploy, image build, container test and a first training run. Each example README then has its own steps (model download, launch, monitor). In short, for one example:
+
 ```bash
-# 1. Deploy infrastructure (from repo root)
-./infrastructure/deploy.sh --action apply --layer all
-
-# 2. Configure kubectl
-$(terraform -chdir=infrastructure/cluster output -raw configure_kubectl)
-
-# 3. Build container image via CodeBuild
-#    BUILD_TARGET defaults to embodied-maniskill_libero (covers all PPO examples)
-zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
-aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
-aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name)
-
-# 4. Stage model weights (per-example -- pick one or run all)
-#    Use restricted envsubst to avoid expanding shell vars in download scripts
-envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
-envsubst '${NAMESPACE}' < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
-
-# 5. Run container validation
+export NAMESPACE=rlinf
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
-kubectl logs -f job/container-test
 
-# 6. Launch training (pick an example)
-# ManiSkill + OpenVLA-OFT PPO
-envsubst < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+# Stage model weights
+envsubst '${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/model-download.yaml | kubectl apply -f -
+kubectl wait -n "$NAMESPACE" job/model-download-maniskill-openvlaoft --for=condition=complete --timeout=60m
 
-# LIBERO + pi0 PPO
-envsubst < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
-
-# DreamZero SFT (multi-node; runs from the unified image, VENV_NAME=dreamzero)
-envsubst < examples/dreamzero/manifests/dreamzero-sft.yaml | kubectl apply -f -
-
-# 7. Monitor
-kubectl logs -f job/rlinf-maniskill-openvlaoft    # or whichever example
+# Launch (restricted envsubst: in-manifest shell variables must stay literal)
+envsubst '${IMAGE} ${NAMESPACE}' < examples/maniskill-openvlaoft-ppo/manifests/maniskill-openvlaoft-ppo.yaml | kubectl apply -f -
+kubectl logs -f -n "$NAMESPACE" job/rlinf-maniskill-openvlaoft
 ```
 
-## DreamZero: World Action Model (WAM)
-
-DreamZero is a **World Action Model** -- a single 14B-parameter Diffusion Transformer (DiT) built on the Wan2.1-I2V-14B-480P video generation backbone that jointly denoises future video and future robot actions in shared attention layers.
-
-Trained on the DROID (Distributed Robot Interaction Dataset) dataset (real Franka Panda robot demonstrations from multiple labs), the model learns to predict both what will happen in the world (video) and what the robot should do (7-DOF (Degrees of Freedom) joint positions) — using video prediction as a computational scaffold for action reasoning.
-
-This example was validated end-to-end on EKS (build → stage → 2-node FSDP2 SFT over EFA → sharded DCP checkpoint → DCP→`.pt` conversion → LIBERO simulator eval + in-sim rollout video). A 300-step SFT run reduced `train/loss` 0.232 → 0.085 (~6.9 s/step) and wrote a 207 GB sharded checkpoint with no corruption — demonstrating the pipeline trains and converges. This is not a task-accuracy claim (300 steps is short; the released checkpoint trained for 100K); for real accuracy, train longer. No success numbers or loss curves are fabricated here.
-
-See [dreamzero/README.md](dreamzero/README.md) for the full architecture, validation details, and reproduction instructions.
+DreamZero (SFT → convert → eval) and IsaacLab (stage → smoke → train) have more steps (launcher ConfigMaps, staging jobs); follow their READMEs.
 
 ## Validation
 
@@ -188,7 +167,12 @@ The repo includes a layered validation harness that tests the full stack from st
 # Cluster validation (requires live EKS cluster)
 ./validate.sh --mode cluster --level 3    # Up to NCCL/EFA
 ./validate.sh --mode cluster --level 5    # Up to training steps
-./validate.sh --mode cluster              # All levels (L0-L6)
+./validate.sh --mode cluster              # L0-L6 (L7 runs only when asked)
+
+# L7: run every example README as written (the documented smoke edit only); results.tsv
+# records image, instance type, Kubernetes version and step time per step
+./validate.sh --mode cluster --skip-to 7 --level 7
+L7_VIDEO=1 ./validate.sh --mode cluster --skip-to 7 --level 7 --example maniskill-openvlaoft-ppo
 
 # Advanced
 ./validate.sh --mode cluster --skip-to 2  # Resume from L2
@@ -201,20 +185,19 @@ The repo includes a layered validation harness that tests the full stack from st
 | Level | Name | What it Tests | Approx Time |
 |-------|------|---------------|-------------|
 | L0 | Infrastructure | GPU, EFA devices, FSx mount | ~1 min |
-| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~45-50 min (measured 43–45 min on main@c70606f0; 48.6 min with EFA 1.50.0 + nccl-tests; build_timeout 90 min) |
+| L1 | Container Build | CodeBuild two-stage image, ECR (Elastic Container Registry) push | ~45-50 min (measured 43–45 min on main@c70606f0; 48.6 min with EFA 1.50.0 + nccl-tests; build_timeout 150 min; `isaaclab-gr00t` ~100 min incl. push) |
 | L2 | Container Test | 12 tests: CUDA, EFA libs, venvs, torch version, comms stack versions, Ray, MPI (Message Passing Interface) | ~2 min |
 | L3 | NCCL/EFA | allreduce bandwidth threshold via MPIJob (p5en: full-node, >= 391 GB/s busbw at 16 GiB) | ~3-4 min |
 | L4 | Model Download | HuggingFace model weights to FSx | ~30 min |
-| L5 | Training Steps | 1 PPO step per example (x3) | ~30 min |
+| L5 | Training Steps | 1 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + pi0 (x2) | ~30 min |
 | L6 | Multi-Node | 2-node Ray cluster, 1 training step | ~10 min |
+| L7 | Example READMEs | Each example's README steps run as written (`tests/lib/examples.sh`): ManiSkill, π₀, IsaacLab smoke + train on g-class; Wan, DreamZero SFT → convert → eval on p5en. Optional: showcase videos (`L7_VIDEO=1`), DreamZero staging (`L7_STAGE=1`) | ~3 h total; run examples in parallel with `--example` |
 
 ### Training Step Test (L5)
 
-Uses `runner.max_steps=1` Hydra override to limit RLinf to exactly 1 PPO step. Tests each example independently:
+Uses the `runner.max_steps=1` Hydra override (`tests/manifests/training-step-test.yaml`, on the `gpu-training` pool) to run exactly 1 PPO step per example. Wan, DreamZero and IsaacLab are covered by L7 (their READMEs as written).
 
 | Example | Venv | Config |
 |---------|------|--------|
 | ManiSkill + OpenVLA-OFT | `openvla-oft` | `maniskill_ppo_openvlaoft_quickstart` |
-| Wan World Model GRPO | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` |
 | LIBERO + pi0 | `openpi` | `libero_spatial_ppo_openpi_quickstart` |
-| DreamZero SFT | `dreamzero` | `libero_sft_dreamzero_14b` |

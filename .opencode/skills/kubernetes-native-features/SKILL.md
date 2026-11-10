@@ -35,7 +35,7 @@ Configuration in Terraform:
 resource "helm_release" "gpu_operator" {
   name    = "gpu-operator"
   chart   = "gpu-operator"
-  version = "v24.9.2"
+  version = "v26.7.2"
 
   set { name = "driver.enabled";       value = "false" }  # AMI has drivers
   set { name = "toolkit.enabled";      value = "true" }
@@ -88,7 +88,7 @@ spec:
 
 ### Network Topology-Aware Scheduling (3+ Nodes)
 
-When scaling beyond 2 nodes or when a cluster placement group cannot ensure co-location, use EC2 instance topology labels to schedule pods on physically proximate nodes. See [Skill 04: Networking - EFA](networking-efa/SKILL.md#topology-aware-scheduling-for-multi-node-training) for full details.
+When scaling beyond 2 nodes or when a cluster placement group cannot ensure co-location, use EC2 instance topology labels to schedule pods on physically proximate nodes. See [Skill 04: Networking - EFA](../networking-efa/SKILL.md#topology-aware-scheduling-for-multi-node-training) for full details.
 
 Nodes are labeled with their position in the datacenter network hierarchy:
 - `topology.k8s.aws/network-node-layer-1` -- top-level switch
@@ -116,7 +116,7 @@ spec:
           app: <reference-name>-multi
 ```
 
-A topology labeler DaemonSet applies these labels automatically. See `manifests/topology-labeler.yaml` and [Skill 04](networking-efa/SKILL.md) for setup.
+A topology labeler DaemonSet applies these labels automatically. See `manifests/topology-labeler.yaml` and [Skill 04](../networking-efa/SKILL.md) for setup.
 
 ### Node Affinity (Pin to GPU Nodes)
 
@@ -332,6 +332,6 @@ spec:
 
 ## Related Skills
 
-- [Skill 01: EKS Cluster Provisioning](eks-cluster-provisioning/SKILL.md) - Cluster setup
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Manifest construction
-- [Skill 15: Monitoring and Observability](monitoring-observability/SKILL.md) - GPU metrics
+- [Skill 01: EKS Cluster Provisioning](../eks-cluster-provisioning/SKILL.md) - Cluster setup
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Manifest construction
+- [Skill 15: Monitoring and Observability](../monitoring-observability/SKILL.md) - GPU metrics

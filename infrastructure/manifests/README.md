@@ -13,8 +13,9 @@ Apply these after `infrastructure/deploy.sh --action apply --layer all` complete
 
 | File | Purpose | Namespace | Prerequisites |
 |------|---------|-----------|---------------|
-| `smoke-test.yaml` | Validates GPU, EFA devices, CUDA (Compute Unified Device Architecture), FSx mount on a single node | `default` | GPU node provisioned, FSx PVC available |
+| `smoke-test.yaml` | Validates GPU, EFA devices, CUDA (Compute Unified Device Architecture), FSx mount on a single node | `rlinf` | GPU node provisioned, FSx PVC available |
 | `container-test.yaml` | Tests the built container image (12 checks: CUDA, EFA libs, comms stack versions, multi-venv, ManiSkill, Ray, OpenMPI, FSx) | `rlinf` | Container image built and pushed to ECR |
+| `container-test-sim.yaml` | Same 12 checks on the `gpu-sim` pool (g7e/g6e, no EFA request: `EXPECT_EFA=0` skips the device check, EFA libraries are still checked) | `rlinf` | Container image built and pushed to ECR, `enable_sim_pool = true` |
 | `topology-labeler.yaml` | DaemonSet that applies EC2 network topology labels to GPU nodes for topology-aware scheduling | `kube-system` | GPU nodes running |
 | `nccl-tests-mpijob.yaml` | MPIJob that measures NCCL (NVIDIA Collective Communications Library) allreduce bandwidth over EFA; quick single-NIC smoke test (public image, 1 GPU + 1 EFA per node) | `default` | MPI Operator addon enabled, 2+ GPU nodes |
 | `nccl-allreduce-fullnode.yaml` | MPIJob running all_reduce_perf from the training image across 2 nodes x 8 GPUs x 16 EFA (p5en.48xlarge); L3 gate for p5en | `rlinf` | MPI Operator addon enabled, 2 free p5en.48xlarge nodes, image in ECR |
@@ -29,10 +30,11 @@ export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_
 
 # L0: Infrastructure smoke test (no container image needed — uses NGC (NVIDIA GPU Cloud) PyTorch)
 kubectl apply -f infrastructure/manifests/smoke-test.yaml
-kubectl logs -f job/smoke-test
+kubectl logs -f job/smoke-test -n rlinf
 
 # L2: Container validation (after CodeBuild completes)
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -       # gpu-training (p5en, EFA)
+# or: envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test-sim.yaml | kubectl apply -f -   # gpu-sim (g7e/g6e)
 kubectl logs -f job/container-test -n rlinf
 
 # Topology labeler (once, enables topology-aware scheduling for multi-node)
@@ -63,7 +65,7 @@ Expected bandwidth (2 nodes, 1GB allreduce): ~437 GB/s for p5.48xlarge, ~2-3 GB/
 
 ```bash
 # Delete after validation
-kubectl delete job smoke-test
+kubectl delete job smoke-test -n rlinf
 kubectl delete job container-test -n rlinf
 kubectl delete mpijob nccl-tests
 kubectl delete statefulset training -n rlinf

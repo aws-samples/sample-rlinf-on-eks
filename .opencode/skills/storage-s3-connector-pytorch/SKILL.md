@@ -275,6 +275,6 @@ Modify checkpoint saving to use DCP with S3StorageWriter. This removes FSx as a 
 
 ## Related Skills
 
-- [Skill 05: Storage - FSx for Lustre](storage-fsx-lustre/SKILL.md) - Primary shared filesystem
-- [Skill 06: Dataset Preparation](dataset-preparation/SKILL.md) - Staging data
-- [Skill 07: Container Image Building](container-image-building/SKILL.md) - Including s3torchconnector in image
+- [Skill 05: Storage - FSx for Lustre](../storage-fsx-lustre/SKILL.md) - Primary shared filesystem
+- [Skill 06: Dataset Preparation](../rlinf-dataset-preparation/SKILL.md) - Staging data
+- [Skill 07: Container Image Building](../container-image-building/SKILL.md) - Including s3torchconnector in image

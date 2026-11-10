@@ -9,7 +9,7 @@
 #
 # Uses upstream evaluations/eval_embodied_agent.py (task_type=embodied_eval,
 # rollout + env workers only) with the training config and pipeline_stage_num=2 to match
-# the OpenVLA video layout (16 envs ÷ 4 GPUs ÷ 2 stages = 2 envs/stage → 7 tiles
+# the OpenVLA video layout (16 envs ÷ 2 GPUs ÷ 2 stages = 4 envs/stage → 7 tiles
 # via ManiSkill RecordVideo tiling after stage merge).
 #
 # Prerequisites:
@@ -22,9 +22,9 @@
 #   - ManiSkill assets at /fsx/assets/maniskill
 #
 # Usage:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
 #   export NAMESPACE=rlinf
-#   export CKPT_PATH=/fsx/checkpoints/<run>/.../full_weights.pt
+#   export CKPT_PATH=/fsx/checkpoints/rlinf-eks/maniskill_ppo_openvlaoft/checkpoints/global_step_<N>/actor/model_state_dict/full_weights.pt
 #   export LORA_PATH=/fsx/models/rlinf-openvlaoft-maniskill-base-lora
 #   ./examples/scripts/generate-showcase-video.sh maniskill-openvlaoft-ppo
 #
@@ -65,8 +65,11 @@ spec:
     spec:
       restartPolicy: Never
       serviceAccountName: training-sa
+      # Same node as the training default (g7e.12xlarge, gpu-sim pool). For p5en, set
+      # instance-type p5en.48xlarge, drop `role: gpu-sim`, and request 8 GPUs (cpu 90, memory 1000Gi).
       nodeSelector:
-        node.kubernetes.io/instance-type: p5en.48xlarge
+        role: gpu-sim
+        node.kubernetes.io/instance-type: g7e.12xlarge
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
@@ -97,13 +100,16 @@ spec:
               # Link simulator assets
               if [ -x "/usr/local/bin/link_assets" ]; then link_assets; fi
 
+              # Start from an empty video dir: videos from an earlier run would otherwise be
+              # picked up by generate-showcase-video.sh (FSx auto-export also deletes them in S3).
+              rm -rf /fsx/checkpoints/openvlaoft-eval-video/video
               cd /workspace/RLinf
 
               # Run eval with video recording.
               # Key overrides to match OpenVLA video format:
               #   rollout.pipeline_stage_num=2    → matches OpenVLA rollout config
               #   env.eval.enable_offload=True    → uses ManiskillOffloadEnv (capture_image at 512×512)
-              #   env.eval.total_num_envs=16      → 16 envs across 4 GPUs × 2 stages
+              #   env.eval.total_num_envs=16      → 16 envs across 2 GPUs × 2 stages
               #   env.eval.max_steps_per_rollout_epoch=1360  → 17x episode length to accumulate
               #     ~170 real motion frames (OFT chunks 8 actions, so only every 8th frame has motion)
               #   env.eval.video_cfg.save_video=True
@@ -127,6 +133,8 @@ spec:
               #     on top of an interpolated node). LoRA is applied by get_model() on the
               #     rollout model from rollout.model.lora_path.
               #   env.eval.rollout_epoch=1  → replaces deprecated algorithm.eval_rollout_epoch
+              #   cluster.component_placement.* → the training config places on GPUs 0-7;
+              #     this Job has 2 (g7e.12xlarge), same placement as the training manifest
               python3 evaluations/eval_embodied_agent.py \
                 --config-path /workspace/RLinf/examples/embodiment/config \
                 --config-name maniskill_ppo_openvlaoft \
@@ -142,7 +150,10 @@ spec:
                 env.eval.max_steps_per_rollout_epoch=1360 \
                 env.eval.video_cfg.save_video=True \
                 env.eval.rollout_epoch=1 \
-                cluster.num_nodes=1
+                cluster.num_nodes=1 \
+                cluster.component_placement.actor=0-1 \
+                cluster.component_placement.env=0 \
+                cluster.component_placement.rollout=1
 
               echo "=== Eval complete. Videos at /fsx/checkpoints/openvlaoft-eval-video/video/ ==="
               ls -la /fsx/checkpoints/openvlaoft-eval-video/video/eval/seed_*/0.mp4 2>/dev/null || \
@@ -154,11 +165,11 @@ spec:
               value: "/fsx/assets/maniskill"
           resources:
             requests:
-              nvidia.com/gpu: 8
-              cpu: "90"
-              memory: "1000Gi"
+              nvidia.com/gpu: 2
+              cpu: "40"
+              memory: "400Gi"
             limits:
-              nvidia.com/gpu: 8
+              nvidia.com/gpu: 2
           volumeMounts:
             - name: fsx
               mountPath: /fsx

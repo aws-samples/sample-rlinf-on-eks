@@ -38,6 +38,18 @@ variable "target_subnet_ids" {
   type        = string
 }
 
+variable "fsx_az" {
+  description = "AZ for FSx (and so for the GPU NodePools, which mount it). Empty = the cluster target_az (first target subnet). Moving FSx to where GPU capacity is only re-creates FSx + PV + PVC; system nodes stay in target_az."
+  type        = string
+  default     = ""
+}
+
+variable "s3_bucket_name" {
+  description = "S3 data bucket name (FSx data repository). Defaults to <cluster_name>-fsx-data when empty. deploy.sh passes the cluster layer's training_s3_bucket_name, so IAM and the bucket always agree."
+  type        = string
+  default     = ""
+}
+
 variable "fsx_storage_capacity" {
   description = "FSx for Lustre storage capacity in GiB (minimum 1200)"
   type        = number

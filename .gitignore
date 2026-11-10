@@ -62,3 +62,9 @@ examples/*/video_artifacts/
 
 # OS
 .DS_Store
+
+# Per-deployment Terraform inputs (README Quick Start step 1); profiles/*.tfvars are tracked
+infrastructure/*/terraform.tfvars
+
+# validate.sh L7 logs + results
+validate-logs/

@@ -298,8 +298,8 @@ spec:
 > **Example (RLinf):** The RLinf L5 test runs `verl.trainer.main_ppo` with Hydra overrides for minimal data (`n_samples=2`, `train_batch_size=4`, `total_epochs=1`) and uses `overwrite_vla_ckpt_utils.sh` for model preparation. The full veRL command includes `data.task_suite_name=libero_10`, `actor_rollout_ref.model.path=/fsx/models/sft-base/openvla-oft-libero10-traj1`, and `algorithm.adv_estimator=grpo`. See `rlinf-functional-testing` skill for complete configurations.
 
 ```bash
-kubectl apply -f test-training-job.yaml
-kubectl logs -f job/test-training-e2e
+kubectl apply -n rlinf -f test-training-job.yaml
+kubectl logs -f -n rlinf job/test-training-e2e
 ```
 
 Expected: Training completes 1 epoch without errors. Validation success rate is reported.
@@ -430,6 +430,6 @@ If running multiple test levels in a single pod, GPU memory from one test may no
 
 ## Related Skills
 
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Manifests used in tests
-- [Skill 12: Deployment Method](deployment-method/SKILL.md) - Pre-flight checks
-- [Skill 14: Benchmarking](benchmarking/SKILL.md) - Performance evaluation
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Manifests used in tests
+- [Skill 12: Deployment Method](../deployment-method/SKILL.md) - Pre-flight checks
+- [Skill 14: Benchmarking](../rlinf-benchmarking/SKILL.md) - Performance evaluation

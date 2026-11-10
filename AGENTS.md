@@ -23,10 +23,11 @@ Prescriptive deployment of the [RLinf](https://github.com/RLinf/RLinf) RL framew
 # Local validation (no cluster needed) -- runs terraform fmt, kubeconform, shellcheck, path integrity
 ./validate.sh --mode local
 
-# Cluster validation -- levels L0 (infra smoke) through L6 (multi-node training)
+# Cluster validation -- levels L0 (infra smoke) through L6 (multi-node training); L7 (example READMEs) only with --level 7
 ./validate.sh --mode cluster --level 3          # run L0-L3
 ./validate.sh --mode cluster --level 5 --skip-to 2 --example maniskill-openvlaoft
 ./validate.sh --mode cluster --continue-on-error
+./validate.sh --mode cluster --skip-to 7 --level 7 --example dreamzero   # L7: README as written
 
 # Infrastructure deploy (layered -- applies all 5 layers in order)
 ./infrastructure/deploy.sh --action plan --layer all
@@ -46,7 +47,7 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 # Deploy K8s manifests (IMAGE = <ecr repo>:<tag> required for envsubst)
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
-envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
+envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 ```
 
 ## Repo Structure (What's Not Obvious)
@@ -61,26 +62,27 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 - **`examples/`** -- RLinf training examples, Dockerfile, buildspec, and manifests. Has its own `AGENTS.md` with RLinf-specific gotchas, dependency pins, and example configs.
 - **`examples/dreamzero/`** -- DreamZero WAM example: manifests, scripts, diagrams, architecture docs, assets, and showcase README.
 - **`.opencode/skills/`** -- prescriptive skills for agent-driven deployment. Shared skills are generic (e.g., `container-image-building`). Reference-specific skills use `rlinf-` prefix (e.g., `rlinf-benchmarking`). Load via `skill` tool when the task matches.
-- **`tests/lib/`** -- `common.sh` (logging, K8s helpers), `local.sh` (offline checks), `cluster.sh` (L0-L6 live tests). Sourced by `validate.sh`.
+- **`tests/lib/`** -- `common.sh` (logging, K8s helpers), `local.sh` (offline checks), `cluster.sh` (L0-L6 live tests), `examples.sh` (L7: example READMEs as written). Sourced by `validate.sh`.
 
 ## Validation Levels (cluster mode)
 
 | Level | What | Timeout | Notes |
 |-------|------|---------|-------|
 | L0 | GPU, EFA, CUDA, FSx smoke test | 10m | `infrastructure/manifests/smoke-test.yaml` |
-| L1 | CodeBuild container build + ECR push | 90m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
+| L1 | CodeBuild container build + ECR push | 150m | Needs `CODEBUILD_PROJECT`, `CODEBUILD_BUCKET` |
 | L2 | Container validation (12 tests) | 20m | Tests multi-venv, EFA libs, CUDA |
 | L3 | NCCL/EFA bandwidth threshold | 10m smoke / up to 30m full-node | MPIJob via MPI Operator; threshold varies by instance. p5en: full-node `nccl-allreduce-fullnode.yaml` (2x8 GPU x16 EFA, our image), 391 GB/s at 16 GiB (`L3_P5EN_THRESHOLD`) |
-| L4 | Model download to FSx | 30m | Downloads models for all examples |
+| L4 | Model download to FSx | 30m | ManiSkill + π₀ models (the L5 examples); the others stage via their READMEs (L7) |
 | L5 | 1 training step per example | 15m each | Per-example; see `examples/AGENTS.md` |
 | L6 | Multi-node training step | 20m | Requires 2+ GPU nodes; uses StatefulSet + Ray |
+| L7 | Example READMEs, run as written | ~3h | `tests/lib/examples.sh`: README bash blocks extracted by `readme_steps.py --harness`; only the documented smoke edit (`smoke_edit.py`). Writes `results.tsv`. `--example NAME`, `L7_VIDEO=1`, `L7_STAGE=1` |
 
 ## Critical Gotchas
 
 ### EFA Networking
 - **EKS node SG needs self-referencing egress rule** (protocol `-1`, self -> self). Without it, EFA RDMA silently fails with `comp_status 5 err -22`. The ingress rule alone is NOT enough. Verified in `infrastructure/cluster/main.tf` `efa_all_traffic_egress`.
 - **EFA installer 1.50.0 in the image, run with `--disable-ngc`** (bundles libfabric 2.6.0amzn1.0 + aws-ofi-nccl 1.21.1). Versions 1.34.0/1.38.0 bundle broken libfabric 1.22. Since 1.48.0 the installer auto-detects NGC containers via `/opt/nvidia/nvidia_entrypoint.sh` (present in the `nvidia/cuda` base) and would install `libnccl-ofi-ngc-v3`, which lacks `libnccl-ofi-tuner.so`; `--disable-ngc` keeps the regular `libnccl-ofi` package. The HOST installer in `infrastructure/cluster/scripts/gpu-node-bootstrap.sh` is still 1.47.0 (node driver/kmod only).
-- **NCCL v2.31.2-1 on the CUDA 12.8.1 base** (upstream moved to CUDA 12.8 at main@6f46f36a); sm_100 (B200) is in the gencode list. aws-ofi-nccl 1.21.1 (EFA 1.50.0) is tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either. Known issue: NCCL 2.31.2 PAT+NVLS has a performance regression on H100; PAT is off by default, so do not set `NCCL_ALGO=PAT`. nccl-tests is pinned to v2.20.0 (v2.21.0 needs NCCL >= 2.32).
+- **NCCL v2.31.2-1 on the CUDA 12.8.1 base** (upstream moved to CUDA 12.8 at main@6f46f36a); sm_100 (B200) and sm_120 (RTX PRO 6000, g7e) are in the gencode list. aws-ofi-nccl 1.21.1 (EFA 1.50.0) is tested with NCCL v2.31.2-1; re-check the plugin's release notes before changing either. Known issue: NCCL 2.31.2 PAT+NVLS has a performance regression on H100; PAT is off by default, so do not set `NCCL_ALGO=PAT`. nccl-tests is pinned to v2.20.0 (v2.21.0 needs NCCL >= 2.32).
 - **`efa_nv_peermem` kernel module is installed but NOT loaded** on EKS GPU AMI. Needs DaemonSet with `modprobe`.
 - **Single-EFA instances**: use `--mca mtl ^ofi` with OpenMPI to avoid OFI MTL conflicts with NCCL.
 
@@ -94,6 +96,8 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 - **Pod Identity replaces IRSA**: `enable_irsa = false` in main.tf. CSI addons use `pod_identity_association` blocks. Provider bug: updating addon from IRSA to Pod Identity fails; workaround is `aws eks update-addon` CLI first.
 - **Layered deploy**: always use `infrastructure/deploy.sh` to apply layers in order. Direct `terraform apply` in a single layer requires manually passing `-var` flags from upstream layers.
 - **Karpenter replaces managed GPU node groups**. GPU nodes are provisioned on-demand by Karpenter when training pods are pending. NodePool limits prevent runaway spending.
+- **EKS 1.37** (Karpenter 1.15.1, GPU Operator v26.7.2). Re-validated from a fresh deploy (2026-11): L0, L3 full-node NCCL 489.8 GB/s on 2× p5en, L5 (ManiSkill + OpenVLA-OFT, LIBERO + π₀), L6, Wan GRPO, DreamZero SFT → convert → eval; IsaacLab L2 + Isaac Sim smoke on g7e, PPO 2 steps on g6e.48xlarge (280 s/step; the README Results have an EKS 1.37 section and the earlier 1.35 per-GPU table). L7 (every example README as written) passed on `:latest` and every `<profile>-latest` built with the README commands; every slim profile ran the examples it serves. Details and the version constraints: `infrastructure/AGENTS.md` ("EKS Version (1.37)").
+- **Karpenter attaches EFA interfaces only when the pod that triggers the launch requests `vpc.amazonaws.com/efa`.** A GPU node launched for a pod without an EFA request comes up with no EFA devices (and the EFA device plugin CrashLoops on it). The p5en workloads (L0, L3, L6, DreamZero) all request EFA.
 
 ### Container Build (Universal)
 - **Image profiles**: `PROFILE=full` (default, 13 venvs, the only `:latest`) or a slim profile from `examples/profiles.env` (`examples`, `maniskill-oft`, `libero-pi0`, `dreamzero`, or custom `INSTALLS`). Profiles are tagged `<profile>-latest`. Manifests take `${IMAGE}` (`<ecr repo>:<tag>`). Details are in `examples/AGENTS.md`.
@@ -103,7 +107,7 @@ envsubst < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 
 ### GPU Sizing (Universal)
 - **FSDP on a single GPU cannot shard** -- full model must fit in VRAM.
-- **g6.8xlarge (~$1/hr) validates infrastructure (L0-L4 + EFA) but NOT training (L5-L6)**. Use p-class instances for training.
+- **g6.8xlarge (~$1/hr) validates infrastructure (L0-L4 + EFA) but NOT training**. Training needs >= 48 GB GPUs: g7e/g6e (`gpu-sim`, the ManiSkill/π₀/IsaacLab defaults) or p-class. The L5/L6 harness runs on the `gpu-training` pool.
 - **DreamZero LIBERO 14B requires 2x p5en.48xlarge** (8x H200 each). FSDP2 `full_shard` across 16 GPUs; the 16.48B model is sharded.
 - **DreamZero 14B DCP checkpoint = ~207 GB on disk (223.7 GB apparent)** (16 FSDP shards incl. full optimizer state). A FULL FSx truncates `torch.save` mid-write (`inline_container.cc unexpected pos`) → corrupt unreadable shards. Ensure >=250GB free before an SFT run.
 

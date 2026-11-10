@@ -72,8 +72,8 @@ spec:
 ```
 
 ```bash
-kubectl apply -f dataset-prep-job.yaml
-kubectl logs -f job/download-sft-model
+kubectl apply -n rlinf -f dataset-prep-job.yaml
+kubectl logs -f -n rlinf job/download-sft-model
 ```
 
 #### Option B: Download to S3, then sync to FSx
@@ -217,6 +217,6 @@ print(f'Tokenizer vocab size: {tokenizer.vocab_size}')
 
 ## Related Skills
 
-- [Skill 05: Storage - FSx for Lustre](storage-fsx-lustre/SKILL.md) - Where data is stored
-- [Skill 05c: Storage - Mountpoint for S3](storage-mountpoint-s3/SKILL.md) - Alternative storage
-- [Skill 07: Container Image Building](container-image-building/SKILL.md) - Including dataset tools in image
+- [Skill 05: Storage - FSx for Lustre](../storage-fsx-lustre/SKILL.md) - Where data is stored
+- [Skill 05c: Storage - Mountpoint for S3](../storage-mountpoint-s3/SKILL.md) - Alternative storage
+- [Skill 07: Container Image Building](../container-image-building/SKILL.md) - Including dataset tools in image
