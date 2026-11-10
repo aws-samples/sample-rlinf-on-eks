@@ -1,6 +1,6 @@
 # IsaacLab Franka Stack-Cube + GR00T N1.5 PPO on Amazon EKS
 
-> **Validated on one RT-core node (2026-11):** 5 PPO steps + eval on g7e.24xlarge, g6e.24xlarge and g5.12xlarge (EKS 1.35); eval `success_once` reproduces the SFT baseline. On **EKS 1.37** the README steps pass as written: Isaac Sim smoke, and 2 PPO steps of the committed manifest on a g6e.48xlarge (4 of 8 L40S, 280 s/step). **Recommended: g7e.24xlarge (4× RTX PRO 6000), ~128 s per PPO step, ~$0.59 per step on-demand.** See [Results](#results).
+> **Validated on one RT-core node (2026-11):** 5 PPO steps + eval on g7e.24xlarge, g6e.24xlarge and g5.12xlarge (EKS 1.35); eval `success_once` reproduces the SFT baseline. On **EKS 1.37** the README steps pass as written: Isaac Sim smoke on g7e, and 2 PPO steps of the committed manifest on a g6e.48xlarge (4 of 8 L40S, 280 s/step). **Recommended: g7e.24xlarge (4× RTX PRO 6000), ~128 s per PPO step, ~$0.59 per step on-demand.** See [Results](#results).
 
 This example runs RLinf's validated recipe for **Isaac Lab** with **NVIDIA GR00T N1.5**: PPO fine-tuning of an SFT policy on the Franka stack-cube task. Upstream reports `success_once` going from **0.654 after SFT to 0.897 after RL** ([RLinf IsaacLab docs](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/isaaclab.html)).
 
@@ -105,7 +105,21 @@ The recipe follows the usual path: SFT on demonstrations, then RL in simulation.
 
 ## Results
 
-PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on GPUs 0-3), 2-step runs unless noted. Step times from RLinf's per-step timers; GPU core use (`SM_ACTIVE`, fraction of cycles an SM has work) from DCGM. Measured 2026-10/11 on EKS 1.35; on-demand prices in us-east-2 (g5 in ap-southeast-3). The image and manifests are unchanged on EKS 1.37 (below).
+### EKS 1.37 (2026-11, us-west-2)
+
+EKS 1.37.1, Karpenter 1.15.1, GPU Operator v26.7.2; image `isaaclab-gr00t-20261109-235402`. README steps 2–4 run as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example isaaclab-gr00t-ppo`, smoke edit `runner.max_steps=2`).
+
+| Check | Instance | Result |
+|---|---|---|
+| Isaac Sim smoke (16 envs, 100 steps) | g7e.12xlarge (RTX PRO 6000) | PASS, `render_ok`; boot 72 s cold / 17 s warm, env create + reset 27 s / 3.9 s, **303 env-steps/s** |
+| PPO, 2 steps, 64 envs, batch 64 (committed manifest) | g6e.48xlarge (4 of 8 L40S; FSx in another AZ) | PASS: step 273 / 280 s (training 159 / 158 s, rollouts 102 / 123 s); train `success_once` 0.55 / 0.67 |
+| Container test (L2), `EXPECT_EFA=0` | g7e.12xlarge | 12/12 PASS (image `isaaclab-gr00t-20261108-224606`, an earlier build of the same profile) |
+
+The step is in line with g6e.24xlarge on EKS 1.35 (253 s, FSx in the same AZ). No 4-GPU g7e was available during the 1.37 test, so the g7e.24xlarge figure below is from 1.35.
+
+### EKS 1.35 (2026-10/11, us-east-2)
+
+PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on GPUs 0-3), 2-step runs unless noted. Step times from RLinf's per-step timers; GPU core use (`SM_ACTIVE`, fraction of cycles an SM has work) from DCGM. On-demand prices in us-east-2 (g5 in ap-southeast-3).
 
 | Instance | GPUs | Batch | Step (s) | Training (s) | Rollouts (s) | Training SM_ACTIVE | $/hr | $/step |
 |---|---|---|---|---|---|---|---|---|
@@ -121,19 +135,17 @@ PPO on one node, 64 training envs, 4 GPUs (env workers, rollout and actor all on
 
 Five steps cannot show RL improvement; these runs validate the pipeline. The 95% interval for 96 trajectories is about ±0.10, so all four agree with the SFT baseline. Upstream reaches 0.897 after a long RL run.
 
-**EKS 1.37** (Karpenter 1.15.1, GPU Operator v26.7.2, us-west-2, 2026-11; image `isaaclab-gr00t-20261109-235402`): README steps 2–4 run as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example isaaclab-gr00t-ppo`, smoke edit `runner.max_steps=2`). Isaac Sim smoke PASS on g7e.12xlarge (`render_ok`); PPO 2 steps PASS on **g6e.48xlarge** (the pod uses 4 of 8 L40S; FSx in another AZ): 273 / 280 s per step, train `success_once` 0.55 / 0.67. g6e.24xlarge measured 253 s on EKS 1.35 with FSx in the same AZ.
-
 What the measurements show:
 - **Use 4 GPUs.** On L40S, 4 GPUs were faster than 8 at batch 64 (training 151 vs 166 s); with batch 32 they were equal. Only the ~550M-parameter action head trains, so spreading the actor over 8 PCIe GPUs only adds communication.
 - **Use `actor.micro_batch_size=64`.** Batch 128 gained 0–5% on g6e and g7e. On 24 GB A10G: `actor.micro_batch_size=32 actor.enable_offload=True` without eval; `actor.micro_batch_size=8 actor.enable_offload=True` with eval (`runner.val_check_interval > 0`), since batch 32 with eval does not fit (eval envs are created at start-up).
 - **The step is simulation-bound on g7e**: Isaac Sim rollouts are ~58% of the step. Faster training GPUs change little; more simulation capacity would.
 - **Attention backend does not matter** for this model: flash-attn and PyTorch SDPA gave the same step time on g7e (training 48 vs 46 s).
 
-**Container test (L2)** on the image with Isaac Sim baked in: 12/12 checks pass (CUDA, EFA/NCCL libraries, `gr00t` venv with torch 2.11, Ray, OpenMPI, FSx); 22.5 GB image pulled in ~4 min onto NVMe.
+**Container test (L2)** on the image with Isaac Sim baked in (`isaaclab-gr00t-20261102-010832`): 12/12 checks pass (CUDA, EFA/NCCL libraries, `gr00t` venv with torch 2.11, Ray, OpenMPI, FSx); 22.5 GB image pulled in ~4 min onto NVMe.
 
-**2-step PPO on the same image** (g5.24xlarge, 4× A10G, batch 32 + actor offload, `ISAAC_PATH=auto` → `/opt/isaacsim`): 558 s per step (training 380 s, rollouts 162 s), in line with the 578 s measured with Isaac Sim on FSx. On g7e (4 of 8 GPUs on a g7e.48xlarge, batch 64): 136 s per step, with rollouts unchanged (75 s).
+**2-step PPO on the same image** (2026-11-03; g5.24xlarge, 4× A10G, batch 32 + actor offload, `ISAAC_PATH=auto` → `/opt/isaacsim`): 558 s per step (training 380 s, rollouts 162 s), in line with the 578 s measured with Isaac Sim on FSx. On g7e (4 of 8 GPUs on a g7e.48xlarge, batch 64): 136 s per step, with rollouts unchanged (75 s).
 
-**Isaac Sim smoke test** (16 envs, 100 steps, warm cache):
+**Isaac Sim smoke test** (16 envs, 100 steps, warm cache; RTX PRO 6000 on EKS 1.37 is in the table above):
 
 | GPU | Isaac Sim boot | env create + reset | env-steps/s | GPU memory |
 |---|---|---|---|---|
