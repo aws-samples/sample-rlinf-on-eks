@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Extract the ```bash blocks under the given README headings, verbatim.
 
-usage: readme_steps.py [--harness] <README.md> "<heading substring>" [...]
+usage: readme_steps.py [--harness] [--from MARK] [--to MARK] <README.md> "<heading substring>" [...]
 Prints the commands of every bash block that follows a matching heading
 (until the next heading), in order. Used by tests/lib/examples.sh to run the
 README steps exactly as a customer would.
+
+--from / --to keep only the lines from the line starting with MARK up to (not
+including) the line starting with the --to MARK; exports before --from are kept.
 
 --harness applies only the edits needed to run the steps unattended:
   * `kubectl logs -f job/X -n NS` -> wait for job/X to complete, then tail its log
@@ -20,9 +23,13 @@ args = sys.argv[1:]
 harness = args[:1] == ['--harness']
 if harness:
     args = args[1:]
-start_at = None
-if args[:1] == ['--from']:
-    start_at, args = args[1], args[2:]
+start_at = stop_at = None
+while args[:1] in (['--from'], ['--to']):
+    if args[0] == '--from':
+        start_at = args[1]
+    else:
+        stop_at = args[1]
+    args = args[2:]
 path, wanted = args[0], args[1:]
 lines = open(path).read().split('\n')
 out, section, inblock, take = [], None, False, False
@@ -48,6 +55,11 @@ if start_at is not None:
         sys.exit(f'readme_steps.py: --from marker not found: {start_at!r}')
     # keep exports from before the marker (NAMESPACE / IMAGE), skip the other commands
     out = [ln for ln in out[:idx] if ln.lstrip().startswith('export ')] + out[idx:]
+if stop_at is not None:
+    idx = next((i for i, ln in enumerate(out) if ln.lstrip().startswith(stop_at)), None)
+    if idx is None:
+        sys.exit(f'readme_steps.py: --to marker not found: {stop_at!r}')
+    out = out[:idx]
 
 if harness:
     res = []

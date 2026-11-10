@@ -19,7 +19,7 @@ L7_ALL="maniskill-openvlaoft-ppo libero-pi0-ppo wan-openvlaoft-grpo dreamzero is
 l7_run_steps() {
   local ex="$1" name="$2" readme="$3"; shift 3
   local script log rc start from=()
-  if [[ "${1:-}" == --from ]]; then from=(--from "$2"); shift 2; fi
+  while [[ "${1:-}" == --from || "${1:-}" == --to ]]; do from+=("$1" "$2"); shift 2; done
   script=$(mktemp "${TMPDIR:-/tmp}/l7-${ex}-${name}.XXXXXX")
   log="${L7_LOG_DIR}/${ex}-${name}.log"
   python3 "${REPO_ROOT}/tests/lib/readme_steps.py" --harness ${from[@]+"${from[@]}"} "$readme" "$@" > "$script"
@@ -135,18 +135,29 @@ l7_dreamzero() {
   grep -aq "eval/success_once" "${L7_LOG_DIR}/dreamzero-eval.log" || { log_fail "L7 dreamzero/eval: no eval/success_once"; return 1; }
 }
 
-# IsaacLab: README "Run it" from step 2 (steps 0-1 are the deploy + image build: L1 with
-# PROFILE=isaaclab-gr00t). Needs the gpu-sim pool and the isaaclab-gr00t-latest image.
+# IsaacLab: README "Run it" steps 2-3 (stage + smoke, 1 GPU) and step 4 (train, 4 GPUs: g7e.24xlarge /
+# g6e.24xlarge). Steps 0-1 are the deploy + image build (L1 with PROFILE=isaaclab-gr00t). Needs the
+# gpu-sim pool and the isaaclab-gr00t-latest image. L7_ISAACLAB_TRAIN_TIMEOUT (default 90m) bounds
+# the train step, including the wait for a 4-GPU node.
 l7_isaaclab-gr00t-ppo() {
   local d="${REPO_ROOT}/examples/isaaclab-gr00t-ppo" rc=0
   l7_cleanup model-download-isaaclab-gr00t isaaclab-smoke rlinf-isaaclab-gr00t
-  l7_smoke
-  l7_run_steps isaaclab-gr00t-ppo smoke+train "$d/README.md" --from '# 2. Stage' "## Run it" || rc=1
-  unset SMOKE_FILTER
-  if (( rc == 0 )) && ! grep -aq '"render_ok": true' "${L7_LOG_DIR}/isaaclab-gr00t-ppo-smoke+train.log"; then
-    log_fail "L7 isaaclab-gr00t-ppo: smoke render_ok is not true"; rc=1
+  l7_run_steps isaaclab-gr00t-ppo smoke "$d/README.md" --from '# 2. Stage' --to '# 4. PPO' "## Run it" || rc=1
+  if (( rc == 0 )) && ! grep -aq '"render_ok": true' "${L7_LOG_DIR}/isaaclab-gr00t-ppo-smoke.log"; then
+    log_fail "L7 isaaclab-gr00t-ppo/smoke: render_ok is not true"
+    sed -i.bak '$ s/\tPASS\t/\tFAIL\t/' "$L7_RESULTS" && rm -f "${L7_RESULTS}.bak"
+    rc=1
   fi
-  l7_cleanup isaaclab-smoke rlinf-isaaclab-gr00t
+  l7_cleanup isaaclab-smoke
+  (( rc == 0 )) || return $rc
+  l7_smoke
+  STEP_TIMEOUT="${L7_ISAACLAB_TRAIN_TIMEOUT:-90m}" \
+    l7_run_steps isaaclab-gr00t-ppo train "$d/README.md" --from '# 4. PPO' "## Run it" || rc=1
+  unset SMOKE_FILTER
+  if (( rc != 0 )) && kubectl get pods -n "$NAMESPACE" -l job-name=rlinf-isaaclab-gr00t --no-headers 2>/dev/null | grep -q Pending; then
+    log_warn "L7 isaaclab-gr00t-ppo/train: pod still Pending (no 4-GPU g7e/g6e capacity)"
+  fi
+  l7_cleanup rlinf-isaaclab-gr00t
   return $rc
 }
 
