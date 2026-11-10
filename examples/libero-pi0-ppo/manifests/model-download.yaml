@@ -12,7 +12,7 @@
 #
 # Usage:
 #   export NAMESPACE=rlinf  # or your namespace
-#   envsubst < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
+#   envsubst '${NAMESPACE}' < examples/libero-pi0-ppo/manifests/model-download.yaml | kubectl apply -f -
 #   kubectl logs -f job/model-download-libero-pi0 -n $NAMESPACE
 apiVersion: batch/v1
 kind: Job

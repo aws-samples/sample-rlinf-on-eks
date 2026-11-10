@@ -350,6 +350,6 @@ aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build
 
 ## Related Skills
 
-- [Skill 08: PyTorch Training Scripts](pytorch-training-scripts/SKILL.md) - Scripts that run inside this image
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Pod specs referencing this image
-- [Skill 12: Deployment Method](deployment-method/SKILL.md) - CI/CD pipeline for image builds
+- [Skill 08: PyTorch Training Scripts](../rlinf-pytorch-training-scripts/SKILL.md) - Scripts that run inside this image
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Pod specs referencing this image
+- [Skill 12: Deployment Method](../deployment-method/SKILL.md) - CI/CD pipeline for image builds

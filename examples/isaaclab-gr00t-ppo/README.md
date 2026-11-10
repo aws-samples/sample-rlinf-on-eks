@@ -1,3 +1,6 @@
+<!-- Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. -->
+<!-- SPDX-License-Identifier: MIT-0 -->
+
 # IsaacLab Franka Stack-Cube + GR00T N1.5 PPO on Amazon EKS
 
 > **Validated on one RT-core node (2026-11):** 5 PPO steps + eval on g7e.24xlarge, g6e.24xlarge and g5.12xlarge (EKS 1.35); eval `success_once` reproduces the SFT baseline. On **EKS 1.37** the README steps pass as written: Isaac Sim smoke on g7e, and 2 PPO steps of the committed manifest on a g6e.48xlarge (4 of 8 L40S, 280 s/step). **Recommended: g7e.24xlarge (4× RTX PRO 6000), ~128 s per PPO step, ~$0.59 per step on-demand.** See [Results](#results).
@@ -58,15 +61,18 @@ Only GR00T's action head (DiT, ~550M parameters) trains; the ~3B Eagle backbone 
 ## Run it
 
 ```bash
-# 0. Infrastructure with the gpu-sim pool (pick a region that offers g7e or g6e;
-#    infrastructure/cluster/profiles/sim-training.tfvars is an example profile)
+# 0. Infrastructure with the gpu-sim pool. Pick a region that offers g7e or g6e: the
+#    profile (infrastructure/cluster/profiles/sim-training.tfvars) sets the cluster layer's
+#    region and overrides terraform.tfvars; TF_VAR_enable_sim_pool=true turns on the NodePool.
 TF_VAR_enable_sim_pool=true ./infrastructure/deploy.sh --action apply --layer all --profile sim-training
 
 export NAMESPACE=rlinf
 export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):isaaclab-gr00t-latest
 
-# 1. Build the image profile (~80 min; the flash-attn rebuild for Blackwell is most of it).
+# 1. Build the image profile (~100 min incl. push; the flash-attn rebuild for Blackwell is most of it).
 #    ACCEPT_ISAAC_SIM_EULA=Y accepts the NVIDIA Isaac Sim license; Isaac Sim is downloaded into your image.
+zip -r rlinf-on-eks.zip examples/Dockerfile examples/Dockerfile.profile examples/profiles.env examples/buildspec.yml examples/scripts/
+aws s3 cp rlinf-on-eks.zip s3://$(terraform -chdir=infrastructure/build output -raw codebuild_source_bucket)/rlinf-on-eks.zip
 aws codebuild start-build --project-name $(terraform -chdir=infrastructure/build output -raw codebuild_project_name) \
   --environment-variables-override name=PROFILE,value=isaaclab-gr00t,type=PLAINTEXT \
     'name=FLASH_ATTN_ARCHS,value=8.0;9.0;10.0;12.0,type=PLAINTEXT' \
@@ -107,13 +113,13 @@ The recipe follows the usual path: SFT on demonstrations, then RL in simulation.
 
 ### EKS 1.37 (2026-11, us-west-2)
 
-EKS 1.37.1, Karpenter 1.15.1, GPU Operator v26.7.2; image `isaaclab-gr00t-20261109-235402`. README steps 2–4 run as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example isaaclab-gr00t-ppo`, smoke edit `runner.max_steps=2`).
+EKS 1.37.1, Karpenter 1.15.1, GPU Operator v26.7.2; `isaaclab-gr00t` image built with the commands above. README steps 2–4 run as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example isaaclab-gr00t-ppo`, smoke edit `runner.max_steps=2`).
 
 | Check | Instance | Result |
 |---|---|---|
 | Isaac Sim smoke (16 envs, 100 steps) | g7e.12xlarge (RTX PRO 6000) | PASS, `render_ok`; boot 72 s cold / 17 s warm, env create + reset 27 s / 3.9 s, **303 env-steps/s** |
 | PPO, 2 steps, 64 envs, batch 64 (committed manifest) | g6e.48xlarge (4 of 8 L40S; FSx in another AZ) | PASS: step 273 / 280 s (training 159 / 158 s, rollouts 102 / 123 s); train `success_once` 0.55 / 0.67 |
-| Container test (L2), `EXPECT_EFA=0` | g7e.12xlarge | 12/12 PASS (image `isaaclab-gr00t-20261108-224606`, an earlier build of the same profile) |
+| Container test (L2), `EXPECT_EFA=0` | g7e.12xlarge | 12/12 PASS |
 
 The step is in line with g6e.24xlarge on EKS 1.35 (253 s, FSx in the same AZ). No 4-GPU g7e was available during the 1.37 test, so the g7e.24xlarge figure below is from 1.35.
 
@@ -141,7 +147,7 @@ What the measurements show:
 - **The step is simulation-bound on g7e**: Isaac Sim rollouts are ~58% of the step. Faster training GPUs change little; more simulation capacity would.
 - **Attention backend does not matter** for this model: flash-attn and PyTorch SDPA gave the same step time on g7e (training 48 vs 46 s).
 
-**Container test (L2)** on the image with Isaac Sim baked in (`isaaclab-gr00t-20261102-010832`): 12/12 checks pass (CUDA, EFA/NCCL libraries, `gr00t` venv with torch 2.11, Ray, OpenMPI, FSx); 22.5 GB image pulled in ~4 min onto NVMe.
+**Container test (L2)** on the image with Isaac Sim baked in: 12/12 checks pass (CUDA, EFA/NCCL libraries, `gr00t` venv with torch 2.11, Ray, OpenMPI, FSx); 22.5 GB image pulled in ~4 min onto NVMe.
 
 **2-step PPO on the same image** (2026-11-03; g5.24xlarge, 4× A10G, batch 32 + actor offload, `ISAAC_PATH=auto` → `/opt/isaacsim`): 558 s per step (training 380 s, rollouts 162 s), in line with the 578 s measured with Isaac Sim on FSx. On g7e (4 of 8 GPUs on a g7e.48xlarge, batch 64): 136 s per step, with rollouts unchanged (75 s).
 

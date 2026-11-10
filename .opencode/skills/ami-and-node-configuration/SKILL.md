@@ -252,6 +252,6 @@ nvidia-smi
 
 ## Related Skills
 
-- [Skill 01: EKS Cluster Provisioning](eks-cluster-provisioning/SKILL.md)
-- [Skill 02: GPU Instance Selection](gpu-instance-selection/SKILL.md)
-- [Skill 04: Networking - EFA](networking-efa/SKILL.md)
+- [Skill 01: EKS Cluster Provisioning](../eks-cluster-provisioning/SKILL.md)
+- [Skill 02: GPU Instance Selection](../gpu-instance-selection/SKILL.md)
+- [Skill 04: Networking - EFA](../networking-efa/SKILL.md)

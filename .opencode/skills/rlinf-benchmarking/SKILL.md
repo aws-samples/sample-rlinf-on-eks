@@ -241,6 +241,6 @@ for run in runs:
 
 ## Related Skills
 
-- [Skill 08: PyTorch Training Scripts](pytorch-training-scripts/SKILL.md) - Training configuration
-- [Skill 13: Functional Testing](functional-testing/SKILL.md) - Pre-benchmark validation
-- [Skill 15: Monitoring and Observability](monitoring-observability/SKILL.md) - GPU/training metrics
+- [Skill 08: PyTorch Training Scripts](../rlinf-pytorch-training-scripts/SKILL.md) - Training configuration
+- [Skill 13: Functional Testing](../functional-testing/SKILL.md) - Pre-benchmark validation
+- [Skill 15: Monitoring and Observability](../monitoring-observability/SKILL.md) - GPU/training metrics

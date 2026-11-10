@@ -361,7 +361,7 @@ Use Mountpoint for S3 for model loading and checkpoint archival, FSx for Lustre 
 
 ## Related Skills
 
-- [Skill 05: Storage - FSx for Lustre](storage-fsx-lustre/SKILL.md) - High-performance shared filesystem
-- [Skill 05b: Storage - S3 Connector for PyTorch](storage-s3-connector-pytorch/SKILL.md) - Programmatic S3 access
-- [Skill 05d: Storage - Amazon S3 Files](storage-s3-files/SKILL.md) - NFS file system access to S3 (dev/debug, dataset prep)
-- [Skill 06: Dataset Preparation](dataset-preparation/SKILL.md) - Staging data on S3/FSx
+- [Skill 05: Storage - FSx for Lustre](../storage-fsx-lustre/SKILL.md) - High-performance shared filesystem
+- [Skill 05b: Storage - S3 Connector for PyTorch](../storage-s3-connector-pytorch/SKILL.md) - Programmatic S3 access
+- [Skill 05d: Storage - Amazon S3 Files](../storage-s3-files/SKILL.md) - NFS file system access to S3 (dev/debug, dataset prep)
+- [Skill 06: Dataset Preparation](../rlinf-dataset-preparation/SKILL.md) - Staging data on S3/FSx

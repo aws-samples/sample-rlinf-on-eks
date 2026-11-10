@@ -19,7 +19,7 @@ Single-node RL (reinforcement learning) fine-tuning of [OpenVLA-OFT](https://git
 | **Algorithm** | PPO (Proximal Policy Optimization) |
 | **Environment** | ManiSkill3 (GPU-accelerated sim) |
 | **Hardware** | 1x g7e.12xlarge (2x RTX PRO 6000 96GB) by default; 1x p5en.48xlarge (8x H200 141GB) for the reference run |
-| **EFA** | 4x EFA (Elastic Fabric Adapter) adapters (for future multi-node scale-out) |
+| **EFA** | Not used (single node). The `gpu-training` pool supports EFA (Elastic Fabric Adapter) for multi-node runs |
 | **Config** | `maniskill_ppo_openvlaoft` |
 | **SFT Checkpoint** | `RLinf/Openvla-oft-SFT-libero10-trajall` |
 
@@ -43,7 +43,7 @@ The SFT (Supervised Fine-Tuning) checkpoint (`openvla-oft-sft-libero10`) was pre
 
 ![RLinf PPO Infrastructure](../diagrams/infra-rlinf-ppo.drawio.svg)
 
-The infrastructure is shared across all three PPO examples. A single GPU node (g7e.12xlarge by default, p5en.48xlarge for the reference run) is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on the node's GPUs (2 RTX PRO 6000 on g7e.12xlarge, 8 H200 on p5en), with FSx for Lustre providing shared access to model weights and checkpoints. This example uses **split GPU placement** (on g7e.12xlarge: actor on GPUs 0-1, environments on 0, rollout on 1; the upstream 8-GPU layout is actor 0-7, environments 0-3, rollout 4-7), but loads an additional artifact from FSx at startup: a LoRA adapter (`rlinf-openvlaoft-maniskill-base-lora`) that bridges the domain gap between the LIBERO (Lifelong Embodied Robot Operation)-trained SFT checkpoint and ManiSkill3. The full 128-environment configuration is critical for OFT — earlier experiments with the quickstart config (8 environments) showed flat learning at 12% success because the sparse reward signal was insufficient for PPO to overcome the larger domain gap. The 64Gi `/dev/shm` shared memory allocation supports high-bandwidth data transfer between GPU-accelerated environment workers and the training process.
+The infrastructure is shared with the other single-node examples (ManiSkill, π₀, Wan). A single GPU node (g7e.12xlarge by default, p5en.48xlarge for the reference run) is provisioned by Karpenter when the training Job is submitted. The pod runs all RL components colocated on the node's GPUs (2 RTX PRO 6000 on g7e.12xlarge, 8 H200 on p5en), with FSx for Lustre providing shared access to model weights and checkpoints. This example uses **split GPU placement** (on g7e.12xlarge: actor on GPUs 0-1, environments on 0, rollout on 1; the upstream 8-GPU layout is actor 0-7, environments 0-3, rollout 4-7), but loads an additional artifact from FSx at startup: a LoRA adapter (`rlinf-openvlaoft-maniskill-base-lora`) that bridges the domain gap between the LIBERO (Lifelong Embodied Robot Operation)-trained SFT checkpoint and ManiSkill3. The full 128-environment configuration is critical for OFT — earlier experiments with the quickstart config (8 environments) showed flat learning at 12% success because the sparse reward signal was insufficient for PPO to overcome the larger domain gap. The 64Gi `/dev/shm` shared memory allocation supports high-bandwidth data transfer between GPU-accelerated environment workers and the training process.
 
 ### Model & Algorithm
 

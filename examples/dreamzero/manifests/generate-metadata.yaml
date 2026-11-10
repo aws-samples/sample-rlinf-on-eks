@@ -33,7 +33,7 @@
 #   - FSx PVC "fsx-claim" bound in the target namespace
 #
 # Usage:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # full image; or :<profile>-latest
 #   export NAMESPACE=dreamzero
 #   # NOTE: use RESTRICTED envsubst -- substitute ONLY ${IMAGE} and ${NAMESPACE}.
 #   # The container command contains shell vars (${PYTHONPATH}, ${DREAMZERO_PATH})

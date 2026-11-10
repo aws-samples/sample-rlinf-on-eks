@@ -310,6 +310,6 @@ aws budgets create-budget \
 
 ## Related Skills
 
-- [Skill 10: Kubernetes Native Features](kubernetes-native-features/SKILL.md) - NVIDIA GPU Operator
-- [Skill 14: Benchmarking](benchmarking/SKILL.md) - Performance baseline metrics
-- [Skill 01: EKS Cluster Provisioning](eks-cluster-provisioning/SKILL.md) - Cluster-level monitoring setup
+- [Skill 10: Kubernetes Native Features](../kubernetes-native-features/SKILL.md) - NVIDIA GPU Operator
+- [Skill 14: Benchmarking](../rlinf-benchmarking/SKILL.md) - Performance baseline metrics
+- [Skill 01: EKS Cluster Provisioning](../eks-cluster-provisioning/SKILL.md) - Cluster-level monitoring setup

@@ -347,8 +347,8 @@ CKPT_PATH="/fsx/checkpoints"
 
 ## Related Skills
 
-- [Skill 03: AMI and Node Configuration](ami-and-node-configuration/SKILL.md) - Lustre client installation
-- [Skill 05b: Storage - S3 Connector for PyTorch](storage-s3-connector-pytorch/SKILL.md) - Alternative storage approach
-- [Skill 05c: Storage - Mountpoint for S3](storage-mountpoint-s3/SKILL.md) - FUSE-based S3 mount for read-heavy workloads
-- [Skill 05d: Storage - Amazon S3 Files](storage-s3-files/SKILL.md) - NFS file system access to S3 (dev/debug, dataset prep)
-- [Skill 06: Dataset Preparation](dataset-preparation/SKILL.md) - Staging data on FSx
+- [Skill 03: AMI and Node Configuration](../ami-and-node-configuration/SKILL.md) - Lustre client installation
+- [Skill 05b: Storage - S3 Connector for PyTorch](../storage-s3-connector-pytorch/SKILL.md) - Alternative storage approach
+- [Skill 05c: Storage - Mountpoint for S3](../storage-mountpoint-s3/SKILL.md) - FUSE-based S3 mount for read-heavy workloads
+- [Skill 05d: Storage - Amazon S3 Files](../storage-s3-files/SKILL.md) - NFS file system access to S3 (dev/debug, dataset prep)
+- [Skill 06: Dataset Preparation](../rlinf-dataset-preparation/SKILL.md) - Staging data on FSx

@@ -24,7 +24,7 @@
 #   - gpu-sim NodePool (workloads layer, enable_sim_pool = true)
 #
 # Usage:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:isaaclab-gr00t-latest NAMESPACE=rlinf
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):isaaclab-gr00t-latest NAMESPACE=rlinf
 #   envsubst '${IMAGE} ${NAMESPACE}' < examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job

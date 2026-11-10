@@ -21,8 +21,8 @@
 #   - FSx PVC "fsx-claim" bound (for FSx access test)
 #
 # Usage:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
-#   envsubst < manifests/container-test.yaml | kubectl apply -f -
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
+#   envsubst '${IMAGE} ${REQUIRED_VENVS}' < infrastructure/manifests/container-test.yaml | kubectl apply -f -
 #   kubectl logs -f job/container-test
 apiVersion: batch/v1
 kind: Job

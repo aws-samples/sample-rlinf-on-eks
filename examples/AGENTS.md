@@ -3,7 +3,7 @@
 
 # RLinf Reference Implementation
 
-RLinf main@d844e648 (post-v0.4, 2026-10-22), re-validated on EKS 1.37 (2026-11) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Deploys PPO training of VLA models on ManiSkill3, LIBERO, and RoboTwin simulators.
+RLinf main@d844e648 (post-v0.4, 2026-10-22), re-validated on EKS 1.37 (2026-11) -- Macro-to-micro flow transformation for Embodied & Agentic RL. Five examples: ManiSkill + OpenVLA-OFT PPO, LIBERO + π₀ PPO, Wan world-model GRPO, DreamZero 14B SFT (2 nodes), IsaacLab GR00T N1.5 PPO.
 
 **Paper**: [RLinf System](https://arxiv.org/abs/2509.15965) | [RLinf-VLA](https://arxiv.org/abs/2510.06710) | **Code**: [github.com/RLinf/RLinf](https://github.com/RLinf/RLinf) | **Docs**: [rlinf.readthedocs.io](https://rlinf.readthedocs.io/en/latest/)
 
@@ -11,13 +11,13 @@ RLinf main@d844e648 (post-v0.4, 2026-10-22), re-validated on EKS 1.37 (2026-11) 
 
 All RLinf training workloads deploy into the `rlinf` namespace. This is created by Terraform (`kubernetes_namespace.rlinf` in `infrastructure/cluster/main.tf`).
 
-- Manifests in `manifests/` and `examples/` hardcode `namespace: rlinf`
+- Manifests take `namespace: ${NAMESPACE}` (set `export NAMESPACE=rlinf`)
 - The `training-sa` ServiceAccount and `fsx-claim` PVC live in `rlinf`
 - MLflow deploys into the `rlinf` namespace (accessed via `mlflow.rlinf.svc.cluster.local`)
 - Infrastructure tests: L0 smoke runs in `rlinf` (it mounts `fsx-claim`); the L3 NCCL smoke MPIJob stays in `default`
 
-Deploy with: `envsubst < examples/<example>/manifests/<example>.yaml | kubectl apply -f -`
-(No `-n rlinf` needed -- namespace is in the manifest.)
+Deploy with restricted envsubst (in-manifest shell variables must stay literal):
+`envsubst '${IMAGE} ${NAMESPACE}' < examples/<example>/manifests/<example>.yaml | kubectl apply -f -`, then `kubectl -n "$NAMESPACE" ...`.
 
 ## Related Skills
 
@@ -33,7 +33,7 @@ Load these via the `skill` tool for RLinf-specific procedural workflows:
 
 ## Examples
 
-All four examples run from ONE unified container image (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream; `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise), differing only by env vars (`CONFIG_NAME`/`VENV_NAME`/`MODEL_PATH`). The base target ships the PPO venvs (`openvla`/`openvla-oft`/`openpi`/gr00t/...) + ManiSkill & openpi assets; DreamZero's `groot` is external via `DREAMZERO_PATH`. venvs are isolated `uv` envs, so one image serves all examples — see the DreamZero section below.
+ManiSkill, π₀, Wan and DreamZero run from ONE unified container image (IsaacLab needs the `isaaclab-gr00t` profile image) (`BUILD_TARGET=embodied-maniskill_libero`, which ships the `dreamzero` venv upstream; `examples/Dockerfile` requires `BUILD_TARGET=embodied-maniskill_libero`; the build fails otherwise), differing only by env vars (`CONFIG_NAME`/`VENV_NAME`/`MODEL_PATH`). The base target ships the PPO venvs (`openvla`/`openvla-oft`/`openpi`/gr00t/...) + ManiSkill & openpi assets; DreamZero's `groot` is external via `DREAMZERO_PATH`. venvs are isolated `uv` envs, so one image serves all examples — see the DreamZero section below.
 
 | Example | `CONFIG_NAME` | `VENV_NAME` | `MODEL_PATH` |
 |---------|---------------|-------------|--------------|

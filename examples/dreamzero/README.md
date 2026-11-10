@@ -97,7 +97,7 @@ aws codebuild start-build \
 
 Downloads the DreamZero-DROID 14B warm-start checkpoint, the umt5-xxl tokenizer, and the `physical-intelligence/libero` dataset (LeRobot layout). The dataset **must** be `physical-intelligence/libero`, not `lerobot/libero` (different `observation.state`/`action` schema).
 
-A Hugging Face token is optional for these public repos but **recommended**: create a `hf-token` Secret (`kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_...`) to avoid the stricter anonymous per-IP rate limits behind the shared NAT gateway. The Job runs anonymously if the Secret is absent.
+A Hugging Face token is optional for these public repos but **recommended**: create a `hf-token` Secret (`kubectl create secret generic hf-token -n "$NAMESPACE" --from-literal=HF_TOKEN=hf_...`) to avoid the stricter anonymous per-IP rate limits behind the shared NAT gateway. The Job runs anonymously if the Secret is absent.
 
 ```bash
 envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/model-download.yaml | kubectl apply -f -

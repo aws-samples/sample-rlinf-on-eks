@@ -17,7 +17,7 @@ Single-node RL (reinforcement learning) fine-tuning of [OpenVLA-OFT](https://git
 | **Eval env** | Real LIBERO-Spatial simulator (ground-truth `success_once`) |
 | **World model** | `RLinf/RLinf-Wan-LIBERO-Spatial` (Wan2.2 VAE + DiT + `resnet_rm.pth` reward model) |
 | **Hardware** | 1x p5en.48xlarge (8x H200 141GB) |
-| **EFA** | 4x EFA (Elastic Fabric Adapter) adapters (for future multi-node scale-out) |
+| **EFA** | Not used (single node). The `gpu-training` pool supports EFA (Elastic Fabric Adapter) for multi-node runs |
 | **Config** | `wan_libero_spatial_grpo_openvlaoft` |
 | **SFT Checkpoint** | `Haozhan72/Openvla-oft-SFT-libero-spatial-traj1` |
 
@@ -99,7 +99,7 @@ These are RLinf's numbers for the recipe this example deploys — a starting-poi
 - Container image built and pushed to ECR (Elastic Container Registry) — the unified image covers this example (`VENV_NAME=openvla-oft`)
 - (Optional) a Hugging Face token to avoid anonymous per-IP rate limits — see below
 
-A Hugging Face token is optional for these public repos but **recommended**: create a `hf-token` Secret (`kubectl create secret generic hf-token --from-literal=HF_TOKEN=hf_...`) so the download Job authenticates. The Job runs anonymously if the Secret is absent.
+A Hugging Face token is optional for these public repos but **recommended**: create a `hf-token` Secret (`kubectl create secret generic hf-token -n "$NAMESPACE" --from-literal=HF_TOKEN=hf_...`) so the download Job authenticates. The Job runs anonymously if the Secret is absent.
 
 ### 1. Download Model Weights
 

@@ -722,7 +722,7 @@ eksctl create cluster \
 
 ## Related Skills
 
-- [Skill 02: GPU Instance Selection](gpu-instance-selection/SKILL.md)
-- [Skill 03: AMI and Node Configuration](ami-and-node-configuration/SKILL.md)
-- [Skill 04: Networking - EFA](networking-efa/SKILL.md)
-- [Skill 05: Storage - FSx for Lustre](storage-fsx-lustre/SKILL.md)
+- [Skill 02: GPU Instance Selection](../gpu-instance-selection/SKILL.md)
+- [Skill 03: AMI and Node Configuration](../ami-and-node-configuration/SKILL.md)
+- [Skill 04: Networking - EFA](../networking-efa/SKILL.md)
+- [Skill 05: Storage - FSx for Lustre](../storage-fsx-lustre/SKILL.md)

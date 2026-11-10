@@ -363,7 +363,7 @@ S3 Files is well-suited for non-training workflows in the RL pipeline:
 
 ## Related Skills
 
-- [Skill 05: Storage - FSx for Lustre](storage-fsx-lustre/SKILL.md) - Recommended for active training (POSIX, sub-ms latency)
-- [Skill 05b: Storage - S3 Connector for PyTorch](storage-s3-connector-pytorch/SKILL.md) - Programmatic S3 access from training code
-- [Skill 05c: Storage - Mountpoint for S3](storage-mountpoint-s3/SKILL.md) - FUSE-based S3 mount (read-heavy, no NFS overhead)
-- [Skill 06: Dataset Preparation](dataset-preparation/SKILL.md) - Staging data on S3
+- [Skill 05: Storage - FSx for Lustre](../storage-fsx-lustre/SKILL.md) - Recommended for active training (POSIX, sub-ms latency)
+- [Skill 05b: Storage - S3 Connector for PyTorch](../storage-s3-connector-pytorch/SKILL.md) - Programmatic S3 access from training code
+- [Skill 05c: Storage - Mountpoint for S3](../storage-mountpoint-s3/SKILL.md) - FUSE-based S3 mount (read-heavy, no NFS overhead)
+- [Skill 06: Dataset Preparation](../rlinf-dataset-preparation/SKILL.md) - Staging data on S3

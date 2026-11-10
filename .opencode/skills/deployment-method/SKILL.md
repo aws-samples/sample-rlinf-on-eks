@@ -349,6 +349,6 @@ kubectl delete job rlinf-training
 
 ## Related Skills
 
-- [Skill 07: Container Image Building](container-image-building/SKILL.md) - Image build process
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Manifest definitions
-- [Skill 13: Functional Testing](functional-testing/SKILL.md) - Post-deployment validation
+- [Skill 07: Container Image Building](../container-image-building/SKILL.md) - Image build process
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Manifest definitions
+- [Skill 13: Functional Testing](../functional-testing/SKILL.md) - Post-deployment validation

@@ -23,8 +23,8 @@
 #     optionally pre-stage via the dataset-preparation skill)
 #
 # Usage:
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/rlinf-on-eks/rlinf:latest   # full image; or :<profile>-latest
-#   envsubst < examples/libero-pi0-ppo.yaml | kubectl apply -f -
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # or :<profile>-latest
+#   envsubst '${IMAGE} ${NAMESPACE}' < examples/libero-pi0-ppo/manifests/libero-pi0-ppo.yaml | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
 metadata:

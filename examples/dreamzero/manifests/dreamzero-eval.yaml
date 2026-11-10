@@ -41,7 +41,7 @@
 #
 # Apply (RESTRICTED envsubst -- substitute ONLY ${IMAGE} and ${NAMESPACE} so the
 # inline ${PYTHONPATH:-} guards in the bootstrap are NOT clobbered):
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # full image; or :<profile>-latest
 #   export NAMESPACE=dreamzero
 #   envsubst '${IMAGE} ${NAMESPACE}' < examples/dreamzero/manifests/dreamzero-eval.yaml | kubectl apply -f -
 ---

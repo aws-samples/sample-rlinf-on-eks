@@ -28,7 +28,7 @@
 #   kubectl -n ${NAMESPACE} create configmap dreamzero-sft-launcher \
 #     --from-file=run_dreamzero_sft_eks.sh=examples/dreamzero/scripts/run_dreamzero_sft_eks.sh \
 #     --dry-run=client -o yaml | kubectl apply -f -
-#   export IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/<repo>:latest   # full image; or :<profile>-latest
+#   export IMAGE=$(terraform -chdir=infrastructure/build output -raw ecr_repository_url):latest   # full image; or :<profile>-latest
 #   export NAMESPACE=rlinf
 #   # RESTRICTED envsubst -- substitute ONLY ${IMAGE} and ${NAMESPACE}.
 #   # (The Ray head-election bash is gone, but keep this habit: other inline

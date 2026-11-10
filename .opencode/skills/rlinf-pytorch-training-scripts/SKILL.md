@@ -12,7 +12,7 @@ description: "RLinf: Adapt RLinf training scripts for distributed execution on A
 
 Adapt Physical AI RL training scripts for execution on Amazon EKS. This involves configuring distributed training, storage paths, environment variables, and framework settings to work within the Kubernetes pod environment.
 
-> **RLinf**: The working launch script is at [`examples/scripts/run_training_eks.sh`](/examples/scripts/run_training_eks.sh). The content below explains the patterns and adaptation decisions.
+> **RLinf**: The working launch script is at [`examples/scripts/run_training_eks.sh`](../../../examples/scripts/run_training_eks.sh). The content below explains the patterns and adaptation decisions.
 
 ## RLinf Entrypoint
 
@@ -285,6 +285,6 @@ HYDRA_FULL_ERROR=1 python -u -m verl.trainer.main_ppo \
 
 ## Related Skills
 
-- [Skill 07: Container Image Building](container-image-building/SKILL.md) - Image containing these scripts
-- [Skill 09: Kubernetes Manifests](kubernetes-manifests/SKILL.md) - Pod specs that launch these scripts
-- [Skill 11: Open-Source Plugins](open-source-plugins/SKILL.md) - Ray/veRL configuration
+- [Skill 07: Container Image Building](../container-image-building/SKILL.md) - Image containing these scripts
+- [Skill 09: Kubernetes Manifests](../kubernetes-manifests/SKILL.md) - Pod specs that launch these scripts
+- [Skill 11: Open-Source Plugins](../rlinf-open-source-plugins/SKILL.md) - Ray/veRL configuration
