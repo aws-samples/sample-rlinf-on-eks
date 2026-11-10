@@ -33,13 +33,14 @@ locals {
   # Use the explicitly set target_az or default to the first AZ.
   effective_az = var.target_az != "" ? var.target_az : data.aws_availability_zones.available.names[0]
 
-  # VPC AZs: subnets in every AZ the region offers (up to 3), in region order. The
-  # order must not depend on target_az: subnets are indexed by position, so
-  # reordering would replace them. Chasing capacity only needs a new target_az
-  # (and an FSx re-create), not a VPC/EKS rebuild.
+  # VPC AZs: subnets in the region's first 3 AZs, in region order. Subnets are indexed
+  # by position, so the order must not depend on target_az (reordering would replace
+  # them) - with one exception: in regions with 4+ AZs, a target_az past the first 3
+  # (e.g. us-west-2d, where a Capacity Block may land) replaces the third subnet, so the
+  # target AZ always has one. Changing target_az between two of the first 3 AZs only
+  # needs a new target_az (and an FSx re-create), not a VPC/EKS rebuild; moving it to or
+  # from an AZ past the first 3 replaces the third subnet.
   # Workload resources (system nodes, FSx, GPU NodePools) stay pinned to target_az.
-  # Regions with 4+ AZs: if target_az is past the first 3 (e.g. us-west-2d, where a
-  # Capacity Block may land), it replaces the last of the 3, so it always has a subnet.
   vpc_azs_first = slice(
     data.aws_availability_zones.available.names,
     0, min(3, length(data.aws_availability_zones.available.names))
