@@ -5,7 +5,7 @@
 
 Multi-node RL fine-tuning of [LeRobot π₀-FAST](https://huggingface.co/lerobot/pi0fast-libero) on **LIBERO-10 (Long)** with **token-level GRPO**, using RLinf's two-node, 16-GPU reference configuration ([upstream docs](https://rlinf.readthedocs.io/en/latest/rst_source/examples/embodied/pi0_fast.html)). Upstream reports `success_once` around 96% after 330 steps (one seed; base policy 85.8%).
 
-> **Validated on EKS 1.37 (2026-11):** 2x p5en.48xlarge, README steps 2–4 as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example libero-pi0fast-grpo`, image `pi0-fast-20261110-072911`). One GRPO step takes **~50 min** at the reference config (1,024 trajectories): rollouts 2,500 s (4 epochs × ~620 s), actor update 472 s. Step 1: train `success_once` 0.876, replay log-probabilities finite (fraction 1.000), ratio 0.971, `approx_kl` 0.0037. Step 2 (3,063 s incl. the final eval): train `success_once` 0.865, ratio 1.003; **eval `success_once` 0.852** over 256 fixed episodes (upstream base policy: 85.8% over 500), RayJob `SUCCEEDED` in 1 h 54 min.
+> **Validated on EKS 1.37 (2026-11):** 2x p5en.48xlarge, README steps 2–4 as written (`./validate.sh --mode cluster --skip-to 7 --level 7 --example libero-pi0fast-grpo`, `pi0-fast` image built with step 1). One GRPO step takes **~50 min** at the reference config (1,024 trajectories): rollouts 2,500 s (4 epochs × ~620 s), actor update 472 s. Step 1: train `success_once` 0.876, replay log-probabilities finite (fraction 1.000), ratio 0.971, `approx_kl` 0.0037. Step 2 (3,063 s incl. the final eval): train `success_once` 0.865, ratio 1.003; **eval `success_once` 0.852** over 256 fixed episodes (upstream base policy: 85.8% over 500), RayJob `SUCCEEDED` in 1 h 54 min.
 
 ## Overview
 
