@@ -24,7 +24,8 @@
 ARG BASE=rlinf-upstream-embodied-common
 FROM ${BASE}
 
-# Space-separated venv:model:env tuples, passed to upstream requirements/install.sh.
+# Space-separated venv:model:env[:flags] tuples, passed to upstream requirements/install.sh.
+# flags (optional): extra install.sh options, comma-separated, e.g. --python,3.12.12,--torch,2.11.0 (commas become spaces)
 ARG INSTALLS
 # Comma-separated download_assets list (e.g. "maniskill,openpi"); empty = none.
 ARG ASSETS=""
@@ -40,11 +41,12 @@ WORKDIR ${UV_PATH}
 RUN test -n "${INSTALLS}" || { echo "ERROR: INSTALLS is empty"; exit 1; }; \
     test -f requirements/install.sh || { echo "ERROR: ${UV_PATH}/requirements/install.sh missing; is BASE upstream embodied-common-image?"; exit 1; }; \
     for t in ${INSTALLS}; do \
-        IFS=: read -r v m e <<<"$t"; \
-        { [ -n "$v" ] && [ -n "$m" ] && [ -n "$e" ]; } || { echo "ERROR: bad INSTALLS tuple '$t' (want venv:model:env)"; exit 1; }; \
-        echo "=== install.sh embodied --venv $v --model $m --env $e ==="; \
+        IFS=: read -r v m e x <<<"$t"; \
+        { [ -n "$v" ] && [ -n "$m" ] && [ -n "$e" ]; } || { echo "ERROR: bad INSTALLS tuple '$t' (want venv:model:env[:flags])"; exit 1; }; \
+        x="${x//,/ }"; \
+        echo "=== install.sh embodied --venv $v --model $m --env $e $x ==="; \
         bash requirements/install.sh ${INSTALL_MIRROR_OPTION} --platform ${RLINF_PLATFORM} \
-            embodied --venv "$v" --model "$m" --env "$e" || exit 1; \
+            embodied --venv "$v" --model "$m" --env "$e" $x || exit 1; \
     done
 
 RUN if [ -n "${ASSETS}" ]; then \
