@@ -258,7 +258,7 @@ data:
     run_test("Multi-Venv Pattern", test_venvs)
 
     # Test 5: example venvs carry the pinned torch (main@d844e648 => 2.11.x).
-    # Full image: all three example venvs must exist. Profile image: check those present.
+    # Full image: all three example venvs must exist. Profile image: every venv it ships.
     # The isaaclab gr00t venv also has torch 2.11 (Isaac Sim's bundled torch 2.7 is only
     # on PYTHONPATH after setup_conda_env.sh, and run_training_eks.sh removes it).
     def test_example_venv_torch():
@@ -268,10 +268,11 @@ data:
         example_venvs = ["openvla-oft", "openpi", "dreamzero"]
         is_profile = os.path.exists(os.path.join(UV_PATH, ".profile"))
         if is_profile:
-            to_check = [v for v in example_venvs + list(per_venv) if v in present_venvs()]
+            # every venv the profile ships (incl. venvs of examples added later, e.g. pi0_fast)
+            to_check = sorted(present_venvs())
         else:
             to_check = example_venvs
-        assert to_check, "profile ships none of the known example venvs"
+        assert to_check, "profile image lists no venvs in UV_PATH/.profile"
         for venv in to_check:
             expected_prefix = per_venv.get(venv, default_prefix)
             python = os.path.join(UV_PATH, venv, "bin", "python3")
