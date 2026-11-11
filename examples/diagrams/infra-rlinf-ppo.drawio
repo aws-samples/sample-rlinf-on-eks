@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="RLinf-on-EKS">
   <diagram name="RLinf PPO Training" id="rlinf-ppo-infra">
-    <mxGraphModel dx="890" dy="1497" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="800" math="0" shadow="0">
+    <mxGraphModel background="#ffffff" dx="890" dy="1497" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="800" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />

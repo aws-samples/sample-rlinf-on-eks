@@ -13,7 +13,7 @@
 #   example  step  status  seconds  image  instance  k8s_version  step_time
 # =============================================================================
 
-L7_ALL="maniskill-openvlaoft-ppo libero-pi0-ppo wan-openvlaoft-grpo dreamzero isaaclab-gr00t-ppo"
+L7_ALL="maniskill-openvlaoft-ppo libero-pi0-ppo wan-openvlaoft-grpo dreamzero isaaclab-gr00t-ppo libero-pi0fast-grpo"
 
 # l7_run_steps EXAMPLE NAME README HEADING...  -> runs the extracted steps, records a row
 l7_run_steps() {
@@ -136,6 +136,23 @@ l7_dreamzero() {
   grep -aq "eval/success_once" "${L7_LOG_DIR}/dreamzero-eval.log" || { log_fail "L7 dreamzero/eval: no eval/success_once"; return 1; }
 }
 
+# pi0-FAST GRPO: README steps 2-4 on 2x p5en (RayJob), smoke edit on the training manifest.
+# Needs the pi0-fast-latest image (IMAGE/IMAGE_TAG override it).
+l7_libero-pi0fast-grpo() {
+  local d="${REPO_ROOT}/examples/libero-pi0fast-grpo" st
+  kubectl delete rayjob libero-pi0fast-grpo -n "$NAMESPACE" --ignore-not-found --wait=true >/dev/null 2>&1 || true
+  l7_cleanup model-download-libero-pi0fast libero-pi0fast-grpo
+  l7_smoke
+  l7_run_steps libero-pi0fast-grpo train "$d/README.md" "2. Download" "3. Launch" "4. Monitor" || { unset SMOKE_FILTER; return 1; }
+  unset SMOKE_FILTER
+  st=$(kubectl get rayjob libero-pi0fast-grpo -n "$NAMESPACE" -o jsonpath='{.status.jobStatus}' 2>/dev/null)
+  if [[ "$st" != SUCCEEDED ]]; then
+    log_fail "L7 libero-pi0fast-grpo/train: RayJob status '${st}' (expected SUCCEEDED)"
+    sed -i.bak '$ s/\tPASS\t/\tFAIL\t/' "$L7_RESULTS" && rm -f "${L7_RESULTS}.bak"
+    return 1
+  fi
+}
+
 # IsaacLab: README "Run it" steps 2-3 (stage + smoke, 1 GPU) and step 4 (train, 4 GPUs: g7e.24xlarge /
 # g6e.24xlarge). Steps 0-1 are the deploy + image build (L1 with PROFILE=isaaclab-gr00t). Needs the
 # gpu-sim pool and the isaaclab-gr00t-latest image. L7_ISAACLAB_TRAIN_TIMEOUT (default 90m) bounds
@@ -209,6 +226,8 @@ run_level_7() {
     fi
     if [[ $ex == isaaclab-gr00t-ppo && -z "${IMAGE_TAG:-}" && -n "${ECR_URI:-}" ]]; then
       export IMAGE="${ECR_URI}:isaaclab-gr00t-latest"
+    elif [[ $ex == libero-pi0fast-grpo && -z "${IMAGE_TAG:-}" && -n "${ECR_URI:-}" ]]; then
+      export IMAGE="${ECR_URI}:pi0-fast-latest"
     else
       export IMAGE="$saved_image"
     fi

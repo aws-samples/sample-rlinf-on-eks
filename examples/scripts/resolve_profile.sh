@@ -46,8 +46,8 @@ resolve_profile() {
   local t venvs=() tuples=()
   read -r -a tuples <<<"$INSTALLS"
   for t in "${tuples[@]}"; do
-    if [[ ! "$t" =~ ^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+$ ]]; then
-      echo "ERROR: bad INSTALLS tuple '$t' (want venv:model:env)" >&2
+    if [[ ! "$t" =~ ^[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+(:[A-Za-z0-9_.,-]+)?$ ]]; then
+      echo "ERROR: bad INSTALLS tuple '$t' (want venv:model:env[:flags], flags comma-separated)" >&2
       return 1
     fi
     venvs+=("${t%%:*}")

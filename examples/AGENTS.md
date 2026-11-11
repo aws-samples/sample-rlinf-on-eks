@@ -152,6 +152,13 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
   unexpected pos` → corrupt unreadable shards (EOFError on convert). Ensure >=250GB free
   before an SFT run.
 
+### LIBERO-10 π₀-FAST GRPO (validated on EKS 1.37, 2026-11)
+- Upstream `libero_10_grpo_pi0_fast` (2 nodes x 8 GPUs), KubeRay RayJob like DreamZero; `pi0-fast` profile image (not in the full image: upstream's Dockerfile has no `pi0_fast` venv).
+- **Runtime pins from upstream's docs**: Python 3.12.12, torch 2.11.0, `--no-flash-attn` (passed as the 4th INSTALLS field, `--python,3.12.12,--torch,2.11.0,--no-flash-attn`).
+- **hf-libero prompts on first import** ("custom path for the dataset folder? (Y/N)") when `~/.libero/config.yaml` is missing; install.sh imports it from a heredoc, so the build died with `EOFError` in `download_hf_libero_assets` (stdin `yes N |` does not help). `Dockerfile.profile` writes a placeholder config; install.sh's `reset_libero_config` rewrites it.
+- **PaliGemma (`google/paligemma-3b-pt-224`) is gated**: the `hf-token` account must accept its license, else `GatedRepoError: 403`.
+- **~50 min per step** at the reference config (rollouts 2,360-2,500 s, inference-bound; actor 466-472 s). 330 steps ≈ 11.5 days. Smoke (2 steps + final eval) = 1 h 54 min. Step 2 eval `success_once` 0.852 (256 episodes) vs upstream base 85.8%.
+
 ### Dataset Download
 - **`snapshot_download` is too slow for large video datasets** (138K+ files). It paginates the full repo tree via REST API before downloading, achieving only ~5 files/s. Use `examples/dreamzero/scripts/fast_hf_download.py` instead (direct URL construction + 64 concurrent async downloads = 65+ files/s, 13x speedup).
 - **HuggingFace rate-limits the tree/metadata API, NOT the file CDN**. Multiple parallel `snapshot_download` calls with the same token trigger 429 errors. Direct file downloads do not.
@@ -235,6 +242,15 @@ DCP→.pt convert → LIBERO sim eval → in-sim rollout video.
 | `examples/dreamzero/scripts/run_dreamzero_eval_eks.sh` | LIBERO simulator eval launcher |
 | `examples/dreamzero/scripts/fast_hf_download.py` | Fast parallel HF downloader (bypasses tree API; for large datasets) |
 | `examples/dreamzero/scripts/plot_dreamzero_loss.py` | Plot SFT loss curve from tensorboard |
+| `examples/isaaclab-gr00t-ppo/manifests/model-download.yaml` | Downloads the GR00T N1.5 stack-cube SFT checkpoint |
+| `examples/isaaclab-gr00t-ppo/manifests/isaaclab-smoke.yaml` | 1-GPU Isaac Sim smoke test (boot, env stepping, camera frames) |
+| `examples/isaaclab-gr00t-ppo/manifests/isaaclab-gr00t-ppo.yaml` | IsaacLab GR00T PPO training Job (gpu-sim pool, 4 GPUs) |
+| `examples/isaaclab-gr00t-ppo/manifests/stage-isaacsim.yaml` | Optional: stage Isaac Sim on FSx (images built without ISAAC_SIM_VERSION) |
+| `examples/isaaclab-gr00t-ppo/scripts/isaaclab_smoke.py` | Isaac Sim smoke test script (ConfigMap `isaaclab-smoke`) |
+| `examples/isaaclab-gr00t-ppo/scripts/gpu_profile.py` | Per-phase timers + DCGM SM_ACTIVE from Prometheus/AMP |
+| `examples/libero-pi0fast-grpo/manifests/model-download.yaml` | Downloads pi0fast-libero + gated paligemma-3b-pt-224 + tokenizer-lib-mean (pinned revisions; needs hf-token) |
+| `examples/libero-pi0fast-grpo/manifests/libero-pi0fast-grpo.yaml` | KubeRay RayJob for 2-node pi0-FAST GRPO (16 GPUs, EFA) |
+| `examples/libero-pi0fast-grpo/scripts/run_pi0fast_grpo_eks.sh` | pi0-FAST GRPO launcher (mirrors upstream run_embodiment.sh) |
 
 ## SFT Model Weights
 

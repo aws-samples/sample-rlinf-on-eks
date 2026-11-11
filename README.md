@@ -124,10 +124,11 @@ kubectl delete job rlinf-maniskill-openvlaoft -n rlinf
 | [LIBERO+Pi0 PPO](examples/libero-pi0-ppo/) | RLinf main@d844e648 | LIBERO Spatial + pi0 PPO | g7e.12xlarge (2x RTX PRO 6000 96GB); or p5en.48xlarge | Validated (EKS 1.37, 2026-11) |
 | [DreamZero SFT](examples/dreamzero/) | RLinf main@d844e648 | LIBERO + DreamZero 14B WAM SFT | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11) |
 | [IsaacLab GR00T PPO](examples/isaaclab-gr00t-ppo/) | RLinf main@d844e648 | Isaac Lab Franka stack-cube + GR00T N1.5 PPO (Isaac Sim 5.1, RT-core GPUs) | g7e.24xlarge (4x RTX PRO 6000 96GB); g6e.24xlarge (4x L40S); or a g7e/g6e.48xlarge | Validated (EKS 1.37, 2026-11) |
+| [LIBERO-10 π₀-FAST GRPO](examples/libero-pi0fast-grpo/) | RLinf main@d844e648 | LIBERO-10 + LeRobot π₀-FAST, token-level GRPO | 2x p5en.48xlarge (16x H200 141GB) | Validated (EKS 1.37, 2026-11; 2 steps + eval) |
 
 All examples were re-validated on **EKS 1.37** (Karpenter 1.15.1, NVIDIA GPU Operator v26.7.2) from a fresh `./infrastructure/deploy.sh --action apply --layer all` in 2026-11: L0 smoke, L3 full-node NCCL on 2× p5en.48xlarge (489.8 GB/s bus bandwidth at 16 GiB over 16 EFA per node), one L5 PPO step each for ManiSkill + OpenVLA-OFT and LIBERO + π₀, the L6 multi-node step, two Wan GRPO steps (~904 s/step), and DreamZero 14B SFT on 2× p5en (20 steps, 16-shard DCP checkpoint) → `.pt` conversion → LIBERO eval smoke. The IsaacLab image passed the container test (L2) and the Isaac Sim smoke test on g7e, and its training manifest ran 2 PPO steps on a g6e.48xlarge (280 s/step).
 
-Each example README was then run exactly as written (`./validate.sh --mode cluster --skip-to 7 --level 7`, smoke edit only) from a fresh clone, on images built with the README build commands (`:latest` and each profile's `<profile>-latest`): ManiSkill (444 s/step), π₀ (428 s/step) and IsaacLab smoke on g7e.12xlarge and training on g6e.48xlarge (280 s/step); Wan (907 s/step) and DreamZero SFT → convert → eval on p5en; both showcase videos regenerated via `generate-showcase-video.sh`. Each slim profile passed L2 and the examples it serves (`dreamzero`: SFT → convert → eval; `maniskill-oft`: ManiSkill + video, Wan; `libero-pi0`: π₀ + video).
+Each example README was then run exactly as written (`./validate.sh --mode cluster --skip-to 7 --level 7`, smoke edit only) from a fresh clone, on images built with the README build commands (`:latest` and each profile's `<profile>-latest`): ManiSkill (444 s/step), π₀ (428 s/step) and IsaacLab smoke on g7e.12xlarge and training on g6e.48xlarge (280 s/step); Wan (907 s/step) and DreamZero SFT → convert → eval on p5en; both showcase videos regenerated via `generate-showcase-video.sh`. π₀-FAST GRPO (2x p5en, `pi0-fast` profile): 2 steps at ~50 min each, final eval `success_once` 0.852. Each slim profile passed L2 and the examples it serves (`dreamzero`: SFT → convert → eval; `maniskill-oft`: ManiSkill + video, Wan; `libero-pi0`: π₀ + video).
 
 ---
 
@@ -142,6 +143,7 @@ The default image (`PROFILE=full`) is upstream's `embodied-maniskill_libero` tar
 | `maniskill-oft` | `openvla-oft` | ManiSkill PPO, Wan GRPO | — |
 | `libero-pi0` | `openpi` (`--env libero`, no ManiSkill) | LIBERO π₀ PPO | 32 min, 13.1 GB |
 | `dreamzero` | `dreamzero` (`--env libero`, no ManiSkill) | DreamZero SFT / convert / eval | 31 min, 12.6 GB |
+| `pi0-fast` | `pi0_fast` (`--env libero`, Python 3.12.12, torch 2.11.0, no flash-attn) | LIBERO-10 π₀-FAST GRPO | 33 min, 12.8 GB |
 | `isaaclab-gr00t` | `gr00t` (`--env isaaclab`) + Isaac Sim 5.1 in the image (`ISAAC_SIM_VERSION`) | IsaacLab GR00T PPO | 78 min with `FLASH_ATTN_ARCHS=8.0;9.0;10.0;12.0`, 22.5 GB (13.7 GB without Isaac Sim) |
 
 Most of every image is the shared part: the CUDA base, the uv-managed Python, and the EFA/NCCL/nccl-tests overlay. So a 1-venv profile is still ~12.5–13 GB, and the main saving is build time.

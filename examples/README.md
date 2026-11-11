@@ -40,7 +40,7 @@ source switch_env openpi       # pi0
 
 ## Examples
 
-Four examples run from the **same unified image** (`BUILD_TARGET=embodied-maniskill_libero`, pushed as `:latest`), which ships every venv they need; they differ only by `CONFIG_NAME`, `VENV_NAME` and `MODEL_PATH`. IsaacLab needs Isaac Sim and RT-core GPUs, so it uses the `isaaclab-gr00t` image profile (`:isaaclab-gr00t-latest`). For smaller per-example images, see "Build a slim image" in the main [README](../README.md).
+Four of the examples run from the **same unified image** (`BUILD_TARGET=embodied-maniskill_libero`, pushed as `:latest`), which ships every venv they need; they differ only by `CONFIG_NAME`, `VENV_NAME` and `MODEL_PATH`. IsaacLab needs Isaac Sim and RT-core GPUs, so it uses the `isaaclab-gr00t` image profile (`:isaaclab-gr00t-latest`); π₀-FAST needs a Python 3.12 venv the full image does not ship, so it uses the `pi0-fast` profile (`:pi0-fast-latest`). For smaller per-example images, see "Build a slim image" in the main [README](../README.md).
 
 | Example | Simulator | Algorithm | Model | Venv | Config | Default instance | Image |
 |---------|-----------|-----------|-------|------|--------|------------------|-------|
@@ -49,6 +49,7 @@ Four examples run from the **same unified image** (`BUILD_TARGET=embodied-manisk
 | [Wan World Model GRPO](wan-openvlaoft-grpo/) | Wan (LIBERO-Spatial) | GRPO | OpenVLA-OFT | `openvla-oft` | `wan_libero_spatial_grpo_openvlaoft` | 1x p5en.48xlarge | `:latest` |
 | [DreamZero SFT](dreamzero/) | LIBERO | SFT | DreamZero 14B (Wan2.1 backbone) | `dreamzero` | `libero_sft_dreamzero_14b` | 2x p5en.48xlarge | `:latest` |
 | [IsaacLab GR00T PPO](isaaclab-gr00t-ppo/) | Isaac Lab (Isaac Sim 5.1) | PPO | GR00T N1.5 | `gr00t` | `isaaclab_franka_stack_cube_ppo_gr00t` | 1x g7e.24xlarge or g6e.24xlarge (`gpu-sim`) | `:isaaclab-gr00t-latest` |
+| [LIBERO-10 π₀-FAST GRPO](libero-pi0fast-grpo/) | LIBERO-10 | GRPO | π₀-FAST (LeRobot) | `pi0_fast` | `libero_10_grpo_pi0_fast` | 2x p5en.48xlarge | `:pi0-fast-latest` |
 
 ## Compute Requirements
 
@@ -61,6 +62,7 @@ Per example, as shipped (each example README lists the alternatives):
 | Wan World Model GRPO | 8x H200 141 GB (p5en.48xlarge) | `gpu-training` | No (single node) | |
 | DreamZero SFT | 16x H200 (2x p5en.48xlarge) | `gpu-training` | Yes, 16 per node | FSDP2 across nodes; plan >= 250 GB free on FSx (a 14B DCP checkpoint is ~207 GB on disk) |
 | IsaacLab GR00T PPO | 4x RTX PRO 6000 or 4x L40S (g7e/g6e.24xlarge; .48xlarge also accepted) | `gpu-sim` | No | Isaac Sim needs RT-core GPUs (not A100/H100/H200) |
+| LIBERO-10 π₀-FAST GRPO | 16x H200 (2x p5en.48xlarge) | `gpu-training` | Yes, 16 per node | ~50 min per GRPO step at the reference config |
 
 The `gpu-sim` pool needs `enable_sim_pool = true` in the workloads layer. All examples share FSx for Lustre (`fsx-claim`) for model weights, datasets and checkpoints. A g6.8xlarge (~$1/hr) is enough to validate the infrastructure (L0-L4, EFA), not to train.
 
@@ -134,7 +136,8 @@ examples/
 ├── libero-pi0-ppo/                     # LIBERO + pi0 PPO
 ├── wan-openvlaoft-grpo/                # Wan World Model GRPO (OpenVLA-OFT)
 ├── dreamzero/                          # DreamZero SFT -> convert -> eval (2 nodes)
-└── isaaclab-gr00t-ppo/                 # IsaacLab GR00T N1.5 PPO (RT-core GPUs)
+├── isaaclab-gr00t-ppo/                 # IsaacLab GR00T N1.5 PPO (RT-core GPUs)
+└── libero-pi0fast-grpo/                # LIBERO-10 pi0-FAST GRPO (2 nodes)
 ```
 
 ## Quick Start

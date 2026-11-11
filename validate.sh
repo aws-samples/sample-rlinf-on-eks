@@ -68,7 +68,7 @@ Options:
   --skip-to N          Start from level N (skip earlier levels)
   --example NAME       L5: maniskill-openvlaoft | libero-pi0
                        L7: maniskill-openvlaoft-ppo | libero-pi0-ppo | wan-openvlaoft-grpo |
-                           dreamzero | isaaclab-gr00t-ppo
+                           dreamzero | isaaclab-gr00t-ppo | libero-pi0fast-grpo
   --continue-on-error  Don't stop on first failure
   -h, --help           Show this help
 
